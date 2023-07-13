@@ -1,12 +1,15 @@
 import React from "react";
-import ReactDOM from "react-dom";
+import {createRoot} from 'react-dom/client';
 import "./index.css";
 import App from "app/app";
 
 // mount to metis node
-ReactDOM.render(
+const metis = document.getElementById("metis") as HTMLElement;
+
+const metisContainer = createRoot(metis);
+
+metisContainer.render(
   <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-  document.getElementById("metis")
+    <App/>
+  </React.StrictMode>
 );
