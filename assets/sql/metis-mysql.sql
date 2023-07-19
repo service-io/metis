@@ -5,8 +5,8 @@ create table `survey`
   `id`          bigint       not null auto_increment,
   `title`       varchar(255) not null comment '主题',
   `description` varchar(1000)         default null comment '描述',
-  `start_at`    timestamp    not null default current_timestamp on update current_timestamp comment '开始时间',
-  `end_at`      timestamp    not null default '0000-00-00 00:00:00' comment '结束时间',
+  `start_at`    timestamp    not null default current_timestamp comment '开始时间',
+  `end_at`      timestamp    not null default current_timestamp comment '结束时间',
   `status`      tinyint      not null default 0 comment '0: 发布 1: 暂存 2: 已结束 3: 已失效',
   `top`         tinyint      not null default 0 comment '0: 不置顶 1: 置顶',
   `creator_by`  bigint                default null comment '创建人员 ID',
@@ -67,7 +67,7 @@ create table `survey_result`
   `ip`        varchar(40)   default '::7f00:0001' comment 'ip 地址',
   `agent`     varchar(300)  default '' comment '代理信息',
   `extra`     varchar(2000) default '' comment '附加数据',
-  `result`    json          default '{}' comment '结果数据',
+  `result`    json          default ('{}') comment '结果数据',
   `answer_at` timestamp     default current_timestamp comment '回答时间',
   primary key (`id`) using btree
 ) engine = innodb
@@ -81,7 +81,7 @@ create table `survey_template`
   `id`         bigint  not null auto_increment,
   `survey_id`  bigint  not null comment '关联调查问卷主表 ID',
   `type`       tinyint not null default 0 comment '0: PC 1: MOBILE 2: EMBED',
-  `content`    text    not null default '' comment '渲染模版',
+  `content`    text    not null default ('') comment '渲染模版',
   `creator_by` bigint           default null comment '创建人员 ID',
   `updater_by` bigint           default null comment '更新人员 ID',
   `created_at` timestamp        default current_timestamp comment '创建时间',

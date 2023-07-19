@@ -5,29 +5,24 @@
 package router
 
 import (
-	"github.com/gin-gonic/gin"
+	"metis/api/survey"
+	"metis/api/welcome"
 	"metis/middleware"
-	"metis/util/logger"
 )
 
 func setApiRouter() {
-	recorder := logger.UseLogger()
-	root := baseRouter.Group("/")
-	root.Use(middleware.CheckAuth(), middleware.CheckRBAC())
-	root.GET("/test",
-		func(ctx *gin.Context) {
-			user := ctx.Request.Context().Value("user").(string)
-			println(user)
-			recorder.Info("into first handler function...")
-			ctx.Abort()
-		},
-		func(c *gin.Context) {
-			recorder.Info("into second handler function...")
-			c.JSON(200, gin.H{
-				"message": "test",
-			})
-		},
-		func(ctx *gin.Context) {
-			recorder.Info("into third handler function...")
-		})
+	welcomeGroup := baseRouter.Group("/welcome")
+	welcomeGroup.Use(middleware.CheckAuth(), middleware.CheckRBAC())
+	{
+		welcomeGroup.GET("/hello", welcome.Hello)
+		welcomeGroup.GET("/whoami", welcome.WhoAmI)
+	}
+
+	v1Group := baseRouter.Group("/api/v1")
+	{
+		surveyGroup := v1Group.Group("/survey")
+		{
+			surveyGroup.GET("/list", survey.List)
+		}
+	}
 }

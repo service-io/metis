@@ -6,14 +6,17 @@ package middleware
 
 import (
 	"github.com/gin-gonic/gin"
-	"golang.org/x/net/context"
 )
 
 func CheckAuth() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		parentContext := context.WithValue(ctx.Request.Context(), "user", "tabuyos-user")
-		ctx.Request = ctx.Request.WithContext(parentContext)
-		ctx.Next()
+		// 1: in go
+		// parentContext := context.WithValue(ctx.Request.Context(), "user", "tabuyos-user")
+		// ctx.Request = ctx.Request.WithContext(parentContext)
+		// ctx.Next()
+
+		// 2: in gin
+		ctx.Set("user", "tabuyos-user")
 	}
 }
 

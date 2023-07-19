@@ -5,6 +5,7 @@
 package logger
 
 import (
+	"context"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
@@ -16,6 +17,15 @@ import (
 )
 
 var logger *zap.Logger
+var logCtx context.Context
+
+func WithCtx(ctx context.Context) {
+	logCtx = ctx
+}
+
+func CleanCtx() {
+	logCtx = nil
+}
 
 func init() {
 	_, ok := file.IsExists(constant.LogDir)
@@ -25,7 +35,7 @@ func init() {
 		}
 	}
 	logger = zap.New(commonCore(), zap.AddCaller())
-	//logger = zap.New(teeCore(), zap.AddCaller())
+	// logger = zap.New(teeCore(), zap.AddCaller())
 }
 
 func getEncoder() zapcore.Encoder {
@@ -74,6 +84,12 @@ func teeCore() zapcore.Core {
 	return zapcore.NewTee(accessCore, errorCore)
 }
 
-func UseLogger() zap.Logger {
-	return *logger
+func UseLogger() *zap.Logger {
+	if logCtx != nil {
+		traceId := logCtx.Value("traceId")
+		if traceId != nil {
+			return logger.With(zap.Any("traceId", traceId))
+		}
+	}
+	return logger
 }

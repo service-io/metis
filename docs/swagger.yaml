@@ -1,0 +1,17 @@
+info:
+  contact: {}
+paths:
+  /welcome/hello:
+    get:
+      description: 打印 Hello 信息
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: HELLO WORLD, HELLO GOLANG, WELCOME TO METIS
+          schema:
+            type: string
+      summary: ping example
+      tags:
+      - welcome
+swagger: "2.0"

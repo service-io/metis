@@ -3,6 +3,12 @@ connmaxlifetime = 60
 maxidleconn = 60
 maxopenconn = 10
 
+[mysql.single]
+addr = "127.0.0.1:3307"
+name = "metis"
+pass = "root"
+user = "root"
+
 [mysql.read]
 addr = "127.0.0.1:3306"
 name = "metis-read"

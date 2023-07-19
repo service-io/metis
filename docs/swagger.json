@@ -1,0 +1,28 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "contact": {}
+    },
+    "paths": {
+        "/welcome/hello": {
+            "get": {
+                "description": "打印 Hello 信息",
+                "produces": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "welcome"
+                ],
+                "summary": "ping example",
+                "responses": {
+                    "200": {
+                        "description": "HELLO WORLD, HELLO GOLANG, WELCOME TO METIS",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

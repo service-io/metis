@@ -5,9 +5,11 @@
 package router
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"metis/util/logger"
 	"net/http"
 	"strings"
@@ -18,7 +20,7 @@ var baseRouter *gin.Engine
 
 func init() {
 	baseRouter = gin.New()
-	baseRouter.Use(loggerFunc(), recoveryFunc())
+	baseRouter.Use(fillTrace(), loggerFunc(), recoveryFunc())
 	baseRouter.NoRoute(func(ctx *gin.Context) {
 		if ctx.Error(errors.New("未找到指定 API")) != nil {
 		}
@@ -29,8 +31,8 @@ func init() {
 }
 
 func loggerFunc() gin.HandlerFunc {
-	useLogger := logger.UseLogger()
 	return func(ctx *gin.Context) {
+		useLogger := logger.UseLogger()
 		start := time.Now()
 		path := ctx.Request.URL.Path
 		raw := ctx.Request.URL.RawQuery
@@ -57,6 +59,16 @@ func loggerFunc() gin.HandlerFunc {
 
 func recoveryFunc() gin.HandlerFunc {
 	return gin.Recovery()
+}
+
+func fillTrace() gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		traceId := uuid.New().String()
+		logCtx := context.WithValue(context.Background(), "traceId", traceId)
+		logger.WithCtx(logCtx)
+		ctx.Next()
+		logger.CleanCtx()
+	}
 }
 
 func BaseRouter() *gin.Engine {

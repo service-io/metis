@@ -2,9 +2,12 @@ package main
 
 import (
 	"fmt"
+	"github.com/json-iterator/go/extra"
 	"metis/config"
 	"metis/router"
 	"metis/util/logger"
+	"strings"
+	"time"
 )
 
 // var db *sql.DB
@@ -16,10 +19,21 @@ import (
 //	Price  float32
 // }
 
+func lowerCamelCase(f string) string {
+	return strings.ToLower(f[:1]) + f[1:]
+}
+
 func main() {
 	useLogger := logger.UseLogger()
 	tomlConfig := config.TomlConfig()
 	baseRouter := router.BaseRouter()
+
+	extra.RegisterFuzzyDecoders()
+	extra.RegisterTimeAsInt64Codec(time.Millisecond)
+	extra.SetNamingStrategy(lowerCamelCase)
+
+	// docs.SwaggerInfo.BasePath = "/"
+	// baseRouter.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerfiles.Handler))
 
 	useLogger.Info(fmt.Sprintf("config -> %v", tomlConfig))
 	useLogger.Info("hello tabuyos, I'm born.")

@@ -20,9 +20,10 @@ import (
 var config = new(Config)
 
 type MySQL struct {
-	Read  DB   `toml:"read"`
-	Write DB   `toml:"write"`
-	Base  Base `toml:"base"`
+	Read   DB   `toml:"read"`
+	Write  DB   `toml:"write"`
+	Single DB   `toml:"single"`
+	Base   Base `toml:"base"`
 }
 
 type Base struct {
