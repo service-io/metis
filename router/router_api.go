@@ -23,6 +23,7 @@ func setApiRouter() {
 		surveyGroup := v1Group.Group("/survey")
 		{
 			surveyGroup.GET("/list", survey.List)
+			surveyGroup.GET("/detail/:id", survey.Detail)
 		}
 	}
 }

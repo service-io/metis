@@ -24,7 +24,7 @@ func lowerCamelCase(f string) string {
 }
 
 func main() {
-	useLogger := logger.UseLogger()
+	useLogger := logger.CommonLogger()
 	tomlConfig := config.TomlConfig()
 	baseRouter := router.BaseRouter()
 

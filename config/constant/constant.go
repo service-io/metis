@@ -19,6 +19,9 @@ const (
 	// LogDir 日志目录
 	LogDir = "logs"
 
+	// TraceIdKey trace id
+	TraceIdKey = "traceId"
+
 	// ProjectDomain 项目域名
 	ProjectDomain = "http://127.0.0.1"
 

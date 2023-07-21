@@ -15,6 +15,11 @@ func (receiver *service) FindAll() []dto.Survey {
 }
 
 func (receiver *service) FindAllWithPage(info *page.Info) []dto.Survey {
-	surveyRepository := survey.New()
+	surveyRepository := survey.New(receiver.ctx)
 	return surveyRepository.SelectWithPage(info.Page, info.Size)
+}
+
+func (receiver *service) FindById(id int64) dto.Survey {
+	surveyRepository := survey.New(receiver.ctx)
+	return surveyRepository.SelectById(id)
 }

@@ -5,6 +5,7 @@
 package survey
 
 import (
+	"github.com/gin-gonic/gin"
 	"metis/model/dto"
 	"metis/model/page"
 )
@@ -12,9 +13,12 @@ import (
 type Service interface {
 	FindAll() []dto.Survey
 	FindAllWithPage(pi *page.Info) []dto.Survey
+	FindById(id int64) dto.Survey
 }
-type service struct{}
+type service struct {
+	ctx *gin.Context
+}
 
-func New() Service {
-	return &service{}
+func New(ctx *gin.Context) Service {
+	return &service{ctx}
 }

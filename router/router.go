@@ -5,11 +5,11 @@
 package router
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"metis/config/constant"
 	"metis/util/logger"
 	"net/http"
 	"strings"
@@ -32,7 +32,7 @@ func init() {
 
 func loggerFunc() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		useLogger := logger.UseLogger()
+		useLogger := logger.AccessLogger(ctx)
 		start := time.Now()
 		path := ctx.Request.URL.Path
 		raw := ctx.Request.URL.RawQuery
@@ -64,10 +64,8 @@ func recoveryFunc() gin.HandlerFunc {
 func fillTrace() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		traceId := uuid.New().String()
-		logCtx := context.WithValue(context.Background(), "traceId", traceId)
-		logger.WithCtx(logCtx)
+		ctx.Set(constant.TraceIdKey, traceId)
 		ctx.Next()
-		logger.CleanCtx()
 	}
 }
 

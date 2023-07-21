@@ -11,6 +11,7 @@ import (
 	"github.com/qustavo/sqlhooks/v2"
 	"go.uber.org/zap"
 	"metis/config"
+	"metis/config/constant"
 	"metis/util/logger"
 	"time"
 )
@@ -26,17 +27,23 @@ func (h *Hooks) Before(ctx context.Context, query string, args ...interface{}) (
 
 // After hook will get the timestamp registered on the Before hook and print the elapsed time
 func (h *Hooks) After(ctx context.Context, query string, args ...interface{}) (context.Context, error) {
-	begin := ctx.Value("begin").(time.Time)
-	useLogger := logger.UseLogger()
-	useLogger.Sugar().Infof("sql: %s, bvs: %v, took: %s", query, args, time.Since(begin))
+	watchSql(ctx, query, args...)
 	return ctx, nil
 }
 
 func (h *Hooks) OnError(ctx context.Context, err error, query string, args ...interface{}) error {
-	begin := ctx.Value("begin").(time.Time)
-	useLogger := logger.UseLogger()
-	useLogger.Sugar().Infof("sql: %s, bvs: %v, took: %s", query, args, time.Since(begin))
+	watchSql(ctx, query, args...)
 	return err
+}
+
+func watchSql(ctx context.Context, query string, args ...interface{}) {
+	begin := ctx.Value("begin").(time.Time)
+	commonLogger := logger.CommonLogger()
+	traceId := ctx.Value(constant.TraceIdKey)
+	if traceId != nil && traceId.(string) != "" {
+		commonLogger = commonLogger.With(zap.Any(constant.TraceIdKey, traceId))
+	}
+	commonLogger.Sugar().Infof("sql: %s, bvs: %v, took: %s", query, args, time.Since(begin))
 }
 
 func init() {
@@ -62,7 +69,7 @@ func init() {
 	var err error
 	db, err = sql.Open(driverName, cfg.FormatDSN())
 	if err != nil {
-		useLogger := logger.UseLogger()
+		useLogger := logger.CommonLogger()
 		useLogger.Error(err.Error(), zap.Error(err))
 	}
 }

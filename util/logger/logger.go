@@ -6,6 +6,7 @@ package logger
 
 import (
 	"context"
+	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
@@ -42,6 +43,7 @@ func getEncoder() zapcore.Encoder {
 	encoderConfig := zap.NewProductionEncoderConfig()
 	encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
 	encoderConfig.EncodeLevel = zapcore.CapitalLevelEncoder
+	// return zapcore.NewJSONEncoder(encoderConfig)
 	return zapcore.NewConsoleEncoder(encoderConfig)
 }
 
@@ -84,12 +86,14 @@ func teeCore() zapcore.Core {
 	return zapcore.NewTee(accessCore, errorCore)
 }
 
-func UseLogger() *zap.Logger {
-	if logCtx != nil {
-		traceId := logCtx.Value("traceId")
-		if traceId != nil {
-			return logger.With(zap.Any("traceId", traceId))
-		}
+func CommonLogger() *zap.Logger {
+	return logger
+}
+
+func AccessLogger(ctx *gin.Context) *zap.Logger {
+	traceId := ctx.GetString(constant.TraceIdKey)
+	if traceId != "" {
+		return logger.With(zap.Any(constant.TraceIdKey, traceId))
 	}
 	return logger
 }

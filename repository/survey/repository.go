@@ -5,46 +5,68 @@
 package survey
 
 import (
-	"database/sql"
+	"context"
+	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
+	"metis/config/constant"
 	"metis/database"
 	"metis/model/dto"
+	"metis/util"
 	"metis/util/logger"
 )
 
 type Repository interface {
 	SelectWithPage(page uint, size uint) []dto.Survey
+	SelectById(id int64) dto.Survey
 }
 
-type repository struct{}
+type repository struct {
+	ctx *gin.Context
+}
 
-func New() Repository {
-	return &repository{}
+func New(ctx *gin.Context) Repository {
+	return &repository{ctx}
+}
+
+func (receiver *repository) getDbCtx() context.Context {
+	return context.WithValue(context.Background(), constant.TraceIdKey, receiver.ctx.GetString(constant.TraceIdKey))
 }
 
 func (receiver *repository) SelectWithPage(page uint, size uint) []dto.Survey {
-	var surveys []dto.Survey
-	useLogger := logger.UseLogger()
+	accessLogger := logger.AccessLogger(receiver.ctx)
 	db := database.FetchDB()
-	prepare, _ := db.Prepare("select id, title, status, start_at from survey limit ? offset ?")
-	rows, err := prepare.Query(size, (page-1)*size)
-	if err != nil {
-		useLogger.Error(err.Error(), zap.Error(err))
-	}
-	defer func(rows *sql.Rows) {
-		err := rows.Close()
-		if err != nil {
-			useLogger.Error(err.Error(), zap.Error(err))
-		}
-	}(rows)
 
-	for rows.Next() {
-		var survey dto.Survey
-		if err := rows.Scan(&survey.Id, &survey.Title, &survey.Status, &survey.StartAt); err != nil {
-			useLogger.Error(err.Error(), zap.Error(err))
-			return nil
-		}
-		surveys = append(surveys, survey)
+	prepare, _ := db.Prepare("select id, title, status, start_at from survey limit ? offset ?")
+	defer util.DeferClose(prepare, util.ErrToLog(accessLogger))
+
+	rows, err := prepare.QueryContext(receiver.getDbCtx(), size, (page-1)*size)
+	defer util.DeferClose(rows, util.ErrToLog(accessLogger))
+
+	if err != nil {
+		accessLogger.Error(err.Error(), zap.Error(err))
 	}
+
+	surveys := util.Rows[dto.Survey](rows, func() (*dto.Survey, []any) {
+		var r = &dto.Survey{}
+		var cs = []any{&r.Id, &r.Title, &r.Status, &r.StartAt}
+		return r, cs
+	})
 	return surveys
+}
+
+func (receiver *repository) SelectById(id int64) dto.Survey {
+	accessLogger := logger.AccessLogger(receiver.ctx)
+	db := database.FetchDB()
+
+	prepare, _ := db.Prepare("select id, title, status, start_at from survey where id = ?")
+	defer util.DeferClose(prepare, util.ErrToLog(accessLogger))
+
+	row := prepare.QueryRowContext(receiver.getDbCtx(), id)
+	survey := util.Row(row, func() (*dto.Survey, []any) {
+		var r = &dto.Survey{}
+		var cs = []any{&r.Id, &r.Title, &r.Status, &r.StartAt}
+		return r, cs
+	})
+
+	return survey
 }
