@@ -23,4 +23,6 @@ go.work
 *.iml
 *.lock
 .idea
-logs
+logs/
+bin/
+*.log
