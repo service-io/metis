@@ -38,7 +38,7 @@ func main() {
 	useLogger.Info(fmt.Sprintf("config -> %v", tomlConfig))
 	useLogger.Info("hello tabuyos, I'm born.")
 
-	err := baseRouter.Run(":8080")
+	err := baseRouter.Run("127.0.0.1:8080")
 	if err != nil {
 		return
 	}
