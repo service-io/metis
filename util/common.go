@@ -55,3 +55,39 @@ func Row[T any](row *sql.Row, supplier func() (*T, []any)) T {
 	}
 	return *r
 }
+
+// SplitFunc 使用函数进行分割, 注意: 并不会移除符合谓词的字符,
+// 具体实现参考 strings.FieldsFunc 进行修改的,
+// strings.FieldsFunc 会移除符合谓词的字符
+func SplitFunc(s string, f func(rune) bool) []string {
+	type span struct {
+		start int
+		end   int
+	}
+	spans := make([]span, 0, 32)
+
+	start := -1
+	for end, char := range s {
+		if f(char) {
+			if start == -1 {
+				start = 0
+			} else if start >= 0 {
+				spans = append(spans, span{start, end})
+				start = end
+			}
+		}
+	}
+
+	if start >= 0 {
+		spans = append(spans, span{start, len(s)})
+	} else {
+		spans = append(spans, span{0, len(s)})
+	}
+
+	a := make([]string, len(spans))
+	for i, span := range spans {
+		a[i] = s[span.start:span.end]
+	}
+
+	return a
+}
