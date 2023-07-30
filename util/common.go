@@ -22,6 +22,13 @@ func DeferClose(closer io.Closer, errHandler ...func(err error)) {
 	}
 }
 
+func HandleRollback(err error, tx *sql.Tx, eh func(err error)) {
+	if err != nil {
+		err := tx.Rollback()
+		eh(err)
+	}
+}
+
 func ErrToLog(logger *zap.Logger) func(err error) {
 	return func(err error) {
 		if err != nil {
@@ -33,6 +40,13 @@ func ErrToLog(logger *zap.Logger) func(err error) {
 func LogErr(logger *zap.Logger, err error) {
 	if err != nil {
 		logger.Error(err.Error())
+	}
+}
+
+func PanicErr(logger *zap.Logger, err error) {
+	if err != nil {
+		logger.Error(err.Error())
+		panic(err)
 	}
 }
 
@@ -90,4 +104,11 @@ func SplitFunc(s string, f func(rune) bool) []string {
 	}
 
 	return a
+}
+
+func ChunkBy[T any](items []T, chunkSize int) (chunks [][]T) {
+	for chunkSize < len(items) {
+		items, chunks = items[chunkSize:], append(chunks, items[0:chunkSize:chunkSize])
+	}
+	return append(chunks, items)
 }

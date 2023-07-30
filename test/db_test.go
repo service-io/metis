@@ -6,14 +6,20 @@ package test
 
 import (
 	"fmt"
+	"github.com/gin-gonic/gin"
 	"github.com/iancoleman/strcase"
 	"go/ast"
 	"go/format"
 	"go/parser"
 	"go/token"
 	"io"
+	"log"
+	"metis/test/first/model/dto"
 	"metis/util"
+	"net/http"
 	"os"
+	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -68,6 +74,30 @@ func TestMyAst(t *testing.T) {
 	if err != nil {
 		fmt.Println(err)
 	}
+}
+
+func isTimeFn(col Column) bool {
+	switch col.Type {
+	case "date":
+		return true
+	case "datetime":
+		return true
+	case "timestamp":
+		return true
+	case "time":
+		return true
+	default:
+		return false
+	}
+}
+
+func existTimeFn(cols []Column) bool {
+	for _, col := range cols {
+		if isTimeFn(col) {
+			return true
+		}
+	}
+	return false
 }
 
 func TestDbGen(t *testing.T) {
@@ -339,4 +369,113 @@ type Column struct {
 	ColumnType      string
 	ColumnKey       string
 	Default         interface{}
+}
+
+type TestStruct struct{}
+
+func (TestStruct) New() *TestStruct {
+	return &TestStruct{}
+}
+
+type FindBlockByLine struct {
+	Fset  *token.FileSet
+	Line  int
+	Block *ast.FuncDecl
+}
+
+func (f *FindBlockByLine) Visit(node ast.Node) ast.Visitor {
+	if node == nil {
+		return nil
+	}
+
+	if blockStmt, ok := node.(*ast.FuncDecl); ok {
+		stmtStartingPosition := blockStmt.Pos()
+		stmtLine := f.Fset.Position(stmtStartingPosition).Line
+		if stmtLine == f.Line {
+			f.Block = blockStmt
+			return nil
+		}
+	}
+	return f
+}
+
+// CreateFunction func
+func (t *TestStruct) CreateFunction(runFunc gin.HandlerFunc) {
+	p := reflect.ValueOf(runFunc).Pointer()
+	fc := runtime.FuncForPC(p)
+	// get filename and line number of runFunc
+	filename, line := fc.FileLine(p)
+
+	fset := token.NewFileSet()
+	// parse file to AST tree
+	node, err := parser.ParseFile(fset, filename, nil, parser.ParseComments)
+	if err != nil {
+		log.Fatal(err)
+	}
+	// walk and find the function block
+	find := &FindBlockByLine{Fset: fset, Line: line}
+	ast.Walk(find, node)
+
+	//err = printer.Fprint(os.Stdout, fset, node)
+
+	if find.Block != nil {
+		println(find.Block.Doc.List[0].Text)
+
+		fp, err := os.Open(filename)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer fp.Close()
+		fp.Seek(int64(find.Block.Pos()-1), 0)
+		buf := make([]byte, int64(find.Block.Body.Rbrace-find.Block.Pos()+1))
+		_, err = io.ReadFull(fp, buf)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		fmt.Println("code of runFunc:", string(buf))
+	}
+	// Read code block, switch values from function pointer
+	// val := reflect.ValueOf(t)....?
+	// fmt.Println(val[0]) // << read switch string option "one"
+	// fmt.Println(val[1]) // << read switch string option "two"
+}
+
+// hello 你好
+// @api /hello
+func hello(ctx *gin.Context) {
+	ctx.JSON(http.StatusOK, 123)
+}
+
+// Testing
+func TestReflection(t *testing.T) {
+	TestStruct{}.New().CreateFunction(hello)
+}
+
+func TestGin(t *testing.T) {
+	engine := gin.Default()
+	engine.GET("/hello", hello)
+	routes := engine.Routes()
+	first := routes[0]
+	handlerFunc := first.HandlerFunc
+	TestStruct{}.New().CreateFunction(handlerFunc)
+	fmt.Printf("%v\n", routes)
+}
+
+func TestString(t *testing.T) {
+	defer func() {
+		fmt.Println("recovered: ", recover())
+	}()
+
+	name := "tabuyos"
+	acc := &dto.Account{}
+	acc.Name = &name
+	fmt.Println(*acc.Name)
+
+	//panic(12)
+
+	fmt.Println(123)
+
+	str := "abcdef"
+	fmt.Println(str[:len(str)-2])
 }
