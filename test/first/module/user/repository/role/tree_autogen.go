@@ -84,7 +84,7 @@ type IAutoGen interface {
 	UpdateWithFuncByID(tx *sql.Tx, role *entity.Role, fn func(f any) bool) bool
 	BatchUpdateWithFuncByID(tx *sql.Tx, roles []*entity.Role, fn func(f any) bool) bool
 
-	SwitchNode(fromId, toId int64) bool
+	//SwitchNode(fromId, toId int64) bool
 }
 
 type autoGen struct {
@@ -133,11 +133,22 @@ func calcInsertField(role *entity.Role, fn func(f any) bool) (string, string, []
 	if fn(role.ID) {
 		fields = append(fields, "<id>")
 		places = append(places, "?")
+		values = append(values, role.ID)
 	}
 	return strings.Join(fields, ", "), strings.Join(places, ", "), values
 }
 
-func (ag *autoGen) internalSelectNodeByID(tx *sql.Tx, db *sql.DB, ids []int64) []*entity.Role {
+func calcUpdateField(role *entity.Role, fn func(f any) bool) (string, []any) {
+	var fields []string
+	var values []any
+	if fn(role.ID) {
+		fields = append(fields, "set <id> = ?")
+		values = append(values, role.ID)
+	}
+	return strings.Join(fields, ", "), values
+}
+
+func (ag *autoGen) internalSelectNodeByIDs(tx *sql.Tx, db *sql.DB, ids []int64) []*entity.Role {
 	recorder := logger.AccessLogger(ag.ctx)
 	recorder.Sugar().Infof("查询 ID 列表: %+v 的数据", ids)
 
@@ -220,7 +231,7 @@ func (ag *autoGen) internalDirectInsert(tx *sql.Tx, role *entity.Role, fn func(f
 	panic("插入失败")
 }
 
-func (ag autoGen) internalUpdateNodeInBothWhenInsert(tx *sql.Tx, left, right, treeNo int) {
+func (ag *autoGen) internalUpdateNodeInBothWhenInsert(tx *sql.Tx, left, right, treeNo int) {
 	recorder := logger.AccessLogger(ag.ctx)
 	var firstSqlBuilder strings.Builder
 	firstSqlBuilder.WriteString("update ")
@@ -237,7 +248,7 @@ func (ag autoGen) internalUpdateNodeInBothWhenInsert(tx *sql.Tx, left, right, tr
 	secondSqlBuilder.WriteString("<table>")
 	secondSqlBuilder.WriteString("set <r_key> = <r_key> + 2 ")
 	secondSqlBuilder.WriteString("where ")
-	secondSqlBuilder.WriteString("<r_key> >= ? and")
+	secondSqlBuilder.WriteString("<r_key> > ? and")
 	secondSqlBuilder.WriteString("<tn_key> = ?")
 	secondSqlBuilder.WriteString("<deleted_cond>")
 	secondSqlBuilder.WriteString(";")
@@ -258,6 +269,7 @@ func (ag autoGen) internalUpdateNodeInBothWhenInsert(tx *sql.Tx, left, right, tr
 	errorHandler := util.ErrToLogAndPanic(recorder)
 
 	stmt, err := tx.Prepare(firstSqlBuilder.String())
+	defer util.DeferClose(stmt, errorHandler)
 	errorHandler(err)
 	result, err := stmt.ExecContext(ag.getDbCtx(), right, treeNo)
 	errorHandler(err)
@@ -265,6 +277,7 @@ func (ag autoGen) internalUpdateNodeInBothWhenInsert(tx *sql.Tx, left, right, tr
 	errorHandler(err)
 
 	stmt, err = tx.Prepare(secondSqlBuilder.String())
+	defer util.DeferClose(stmt, errorHandler)
 	errorHandler(err)
 	result, err = stmt.ExecContext(ag.getDbCtx(), right, treeNo)
 	errorHandler(err)
@@ -272,6 +285,7 @@ func (ag autoGen) internalUpdateNodeInBothWhenInsert(tx *sql.Tx, left, right, tr
 	errorHandler(err)
 
 	stmt, err = tx.Prepare(thirdSqlBuilder.String())
+	defer util.DeferClose(stmt, errorHandler)
 	errorHandler(err)
 	result, err = stmt.ExecContext(ag.getDbCtx(), left, right, treeNo)
 	errorHandler(err)
@@ -304,6 +318,7 @@ func (ag *autoGen) internalUpdateNodeInOnlyPrecursorWhenInsert(tx *sql.Tx, right
 	errorHandler := util.ErrToLogAndPanic(recorder)
 
 	stmt, err := tx.Prepare(firstSqlBuilder.String())
+	defer util.DeferClose(stmt, errorHandler)
 	errorHandler(err)
 	result, err := stmt.ExecContext(ag.getDbCtx(), right, treeNo)
 	errorHandler(err)
@@ -311,6 +326,7 @@ func (ag *autoGen) internalUpdateNodeInOnlyPrecursorWhenInsert(tx *sql.Tx, right
 	errorHandler(err)
 
 	stmt, err = tx.Prepare(secondSqlBuilder.String())
+	defer util.DeferClose(stmt, errorHandler)
 	errorHandler(err)
 	result, err = stmt.ExecContext(ag.getDbCtx(), right, treeNo)
 	errorHandler(err)
@@ -327,11 +343,13 @@ func (ag *autoGen) internalInsertWithFunc(tx *sql.Tx, role *entity.Role, pid, si
 		// 所以该节点一定是根节点
 
 		// 直接插入
-		ag.internalDirectInsert(tx, role, fn)
+		return ag.internalDirectInsert(tx, role, fn)
 	}
 
-	precursorNodes := ag.internalSelectNodeByID(tx, nil, []int64{pid})
-	if len(precursorNodes) == 1 {
+	precursorNodes := ag.internalSelectNodeByIDs(tx, nil, []int64{pid})
+	//nodeLen := len(precursorNodes)
+	nodeLen := len(precursorNodes)
+	if nodeLen == 1 {
 		precursor := precursorNodes[0]
 		role.TreeNo = precursor.TreeNo
 		level := *precursor.Level + 1
@@ -344,9 +362,9 @@ func (ag *autoGen) internalInsertWithFunc(tx *sql.Tx, role *entity.Role, pid, si
 			role.Right = &right
 
 			ag.internalUpdateNodeInOnlyPrecursorWhenInsert(tx, *precursor.Right, *precursor.TreeNo)
-			ag.internalDirectInsert(tx, role, fn)
+			return ag.internalDirectInsert(tx, role, fn)
 		} else {
-			successorNodes := ag.internalSelectNodeByID(tx, nil, []int64{pid})
+			successorNodes := ag.internalSelectNodeByIDs(tx, nil, []int64{pid})
 			if len(successorNodes) == 1 {
 				successor := successorNodes[0]
 				right := *successor.Right + 2
@@ -354,17 +372,92 @@ func (ag *autoGen) internalInsertWithFunc(tx *sql.Tx, role *entity.Role, pid, si
 				role.Right = &right
 
 				ag.internalUpdateNodeInBothWhenInsert(tx, *successor.Left, *successor.Right, *successor.TreeNo)
-				ag.internalDirectInsert(tx, role, fn)
-			} else if len(successorNodes) == 0 {
-				panic("不存在后继节点")
+				return ag.internalDirectInsert(tx, role, fn)
 			}
-			panic("存在多个后继节点")
+			panic("存在多个或不存在后继节点")
 		}
-
-	} else if len(precursorNodes) == 0 {
-		panic("不存在前驱节点")
 	}
-	panic("存在多个前驱节点")
+	panic("存在多个或不存在前驱节点")
+}
+
+func (ag *autoGen) internalDirectDelete(tx *sql.Tx, id int64) bool {
+	recorder := logger.AccessLogger(ag.ctx)
+	nodes := ag.internalSelectNodeByIDs(tx, nil, []int64{id})
+	if len(nodes) == 1 {
+		node := nodes[0]
+		right := *node.Right
+		left := *node.Left
+		treeNo := *node.TreeNo
+		delta := right - left + 1
+		ag.internalUpdateNodeWhenDelete(tx, delta, right, treeNo)
+
+		var sqlBuilder strings.Builder
+		sqlBuilder.WriteString("update ")
+		sqlBuilder.WriteString("<table>")
+		sqlBuilder.WriteString("set <d_key> = 1 ")
+		sqlBuilder.WriteString("where ")
+		sqlBuilder.WriteString("<l_key> >= ? and")
+		sqlBuilder.WriteString("<r_key> <= ? and")
+		sqlBuilder.WriteString("<tn_key> = ?")
+		sqlBuilder.WriteString("<deleted_cond>")
+		sqlBuilder.WriteString(";")
+
+		errorHandler := util.ErrToLogAndPanic(recorder)
+
+		stmt, err := tx.Prepare(sqlBuilder.String())
+		defer util.DeferClose(stmt, errorHandler)
+		errorHandler(err)
+		result, err := stmt.ExecContext(ag.getDbCtx(), left, right, treeNo)
+		errorHandler(err)
+		af, err := result.RowsAffected()
+		errorHandler(err)
+		if af == 1 {
+			return true
+		}
+		panic("删除错误")
+	}
+	panic("节点数错误")
+}
+
+func (ag *autoGen) internalUpdateNodeWhenDelete(tx *sql.Tx, delta, right, treeNo int) {
+	recorder := logger.AccessLogger(ag.ctx)
+	var firstSqlBuilder strings.Builder
+	firstSqlBuilder.WriteString("update ")
+	firstSqlBuilder.WriteString("<table>")
+	firstSqlBuilder.WriteString("set <l_key> = <l_key> - ? ")
+	firstSqlBuilder.WriteString("where ")
+	firstSqlBuilder.WriteString("<l_key> > ? and")
+	firstSqlBuilder.WriteString("<tn_key> = ?")
+	firstSqlBuilder.WriteString("<deleted_cond>")
+	firstSqlBuilder.WriteString(";")
+
+	var secondSqlBuilder strings.Builder
+	secondSqlBuilder.WriteString("update ")
+	secondSqlBuilder.WriteString("<table>")
+	secondSqlBuilder.WriteString("set <r_key> = <r_key> - ? ")
+	secondSqlBuilder.WriteString("where ")
+	secondSqlBuilder.WriteString("<r_key> > ? and")
+	secondSqlBuilder.WriteString("<tn_key> = ?")
+	secondSqlBuilder.WriteString("<deleted_cond>")
+	secondSqlBuilder.WriteString(";")
+
+	errorHandler := util.ErrToLogAndPanic(recorder)
+
+	stmt, err := tx.Prepare(firstSqlBuilder.String())
+	defer util.DeferClose(stmt, errorHandler)
+	errorHandler(err)
+	result, err := stmt.ExecContext(ag.getDbCtx(), delta, right, treeNo)
+	errorHandler(err)
+	_, err = result.RowsAffected()
+	errorHandler(err)
+
+	stmt, err = tx.Prepare(secondSqlBuilder.String())
+	defer util.DeferClose(stmt, errorHandler)
+	errorHandler(err)
+	result, err = stmt.ExecContext(ag.getDbCtx(), delta, right, treeNo)
+	errorHandler(err)
+	_, err = result.RowsAffected()
+	errorHandler(err)
 }
 
 func (ag *autoGen) getDbCtx() context.Context {
@@ -389,7 +482,7 @@ func (ag *autoGen) BatchSelectByID(ids []int64) []*entity.Role {
 	recorder.Sugar().Infof("查询 ID 列表: %+v 的数据", ids)
 
 	db := database.FetchDB()
-	return ag.internalSelectNodeByID(nil, db, ids)
+	return ag.internalSelectNodeByIDs(nil, db, ids)
 }
 
 func (ag *autoGen) SelectByName(name string) []*entity.Role {
@@ -540,11 +633,11 @@ func (ag *autoGen) SelectAllPosterity(id int64) []*entity.Role {
 	currentNode := util.Row(row, mapperAll)
 
 	secondStmt, err := tx.Prepare(sqlBuilder.String())
-	errorHandler(err)
 	defer util.DeferClose(secondStmt, errorHandler)
-	rows, err := secondStmt.QueryContext(ag.getDbCtx(), *currentNode.Left, *currentNode.Right, *currentNode.TreeNo)
 	errorHandler(err)
+	rows, err := secondStmt.QueryContext(ag.getDbCtx(), *currentNode.Left, *currentNode.Right, *currentNode.TreeNo)
 	defer util.DeferClose(rows, errorHandler)
+	errorHandler(err)
 	ds := util.Rows(rows, mapperAll)
 	return ds
 }
@@ -579,9 +672,11 @@ func (ag *autoGen) SelectDirectPosterity(id int64) []*entity.Role {
 	currentNode := util.Row(row, mapperAll)
 
 	secondStmt, err := tx.Prepare(sqlBuilder.String())
-	errorHandler(err)
 	defer util.DeferClose(secondStmt, errorHandler)
-	rows, err := secondStmt.QueryContext(ag.getDbCtx(), *currentNode.Level+1, *currentNode.Left, *currentNode.Right, *currentNode.TreeNo)
+	errorHandler(err)
+	rows, err := secondStmt.QueryContext(
+		ag.getDbCtx(), *currentNode.Level+1, *currentNode.Left, *currentNode.Right, *currentNode.TreeNo,
+	)
 	errorHandler(err)
 	defer util.DeferClose(rows, errorHandler)
 	ds := util.Rows(rows, mapperAll)
@@ -617,11 +712,11 @@ func (ag *autoGen) SelectBrother(id int64) []*entity.Role {
 	currentNode := util.Row(row, mapperAll)
 
 	secondStmt, err := tx.Prepare(sqlBuilder.String())
-	errorHandler(err)
 	defer util.DeferClose(secondStmt, errorHandler)
-	rows, err := secondStmt.QueryContext(ag.getDbCtx(), *currentNode.Level+1, *currentNode.TreeNo, id)
 	errorHandler(err)
+	rows, err := secondStmt.QueryContext(ag.getDbCtx(), *currentNode.Level+1, *currentNode.TreeNo, id)
 	defer util.DeferClose(rows, errorHandler)
+	errorHandler(err)
 	ds := util.Rows(rows, mapperAll)
 	return ds
 }
@@ -654,11 +749,11 @@ func (ag *autoGen) SelectBrotherAndSelf(id int64) []*entity.Role {
 	currentNode := util.Row(row, mapperAll)
 
 	secondStmt, err := tx.Prepare(sqlBuilder.String())
-	errorHandler(err)
 	defer util.DeferClose(secondStmt, errorHandler)
-	rows, err := secondStmt.QueryContext(ag.getDbCtx(), *currentNode.Level+1, *currentNode.TreeNo)
 	errorHandler(err)
+	rows, err := secondStmt.QueryContext(ag.getDbCtx(), *currentNode.Level+1, *currentNode.TreeNo)
 	defer util.DeferClose(rows, errorHandler)
+	errorHandler(err)
 	ds := util.Rows(rows, mapperAll)
 	return ds
 }
@@ -692,11 +787,11 @@ func (ag *autoGen) SelectAncestorChain(id int64) []*entity.Role {
 	currentNode := util.Row(row, mapperAll)
 
 	secondStmt, err := tx.Prepare(sqlBuilder.String())
-	errorHandler(err)
 	defer util.DeferClose(secondStmt, errorHandler)
-	rows, err := secondStmt.QueryContext(ag.getDbCtx(), *currentNode.Left, *currentNode.Right, *currentNode.TreeNo)
 	errorHandler(err)
+	rows, err := secondStmt.QueryContext(ag.getDbCtx(), *currentNode.Left, *currentNode.Right, *currentNode.TreeNo)
 	defer util.DeferClose(rows, errorHandler)
+	errorHandler(err)
 	ds := util.Rows(rows, mapperAll)
 	return ds
 }
@@ -731,8 +826,8 @@ func (ag *autoGen) SelectAncestor(id int64, level int) *entity.Role {
 	currentNode := util.Row(row, mapperAll)
 
 	secondStmt, err := tx.Prepare(sqlBuilder.String())
-	errorHandler(err)
 	defer util.DeferClose(secondStmt, errorHandler)
+	errorHandler(err)
 	row = secondStmt.QueryRowContext(ag.getDbCtx(), *currentNode.Left, *currentNode.Right, level, *currentNode.TreeNo)
 	ds := util.Row(row, mapperAll)
 	return ds
@@ -768,9 +863,11 @@ func (ag *autoGen) SelectParent(id int64) *entity.Role {
 	currentNode := util.Row(row, mapperAll)
 
 	secondStmt, err := tx.Prepare(sqlBuilder.String())
-	errorHandler(err)
 	defer util.DeferClose(secondStmt, errorHandler)
-	row = secondStmt.QueryRowContext(ag.getDbCtx(), *currentNode.Left, *currentNode.Right, *currentNode.Level-1, *currentNode.TreeNo)
+	errorHandler(err)
+	row = secondStmt.QueryRowContext(
+		ag.getDbCtx(), *currentNode.Left, *currentNode.Right, *currentNode.Level-1, *currentNode.TreeNo,
+	)
 	ds := util.Row(row, mapperAll)
 	return ds
 }
@@ -796,8 +893,8 @@ func (ag *autoGen) SelectByTreeNoAndLevel(treeNo, level int) []*entity.Role {
 	defer util.DeferClose(stmt, errorHandler)
 	errorHandler(err)
 	rows, err := stmt.QueryContext(ag.getDbCtx(), treeNo, level)
-	errorHandler(err)
 	defer util.DeferClose(rows, errorHandler)
+	errorHandler(err)
 	ds := util.Rows(rows, mapperAll)
 	return ds
 }
@@ -822,8 +919,8 @@ func (ag *autoGen) SelectByLevel(level int) []*entity.Role {
 	defer util.DeferClose(stmt, errorHandler)
 	errorHandler(err)
 	rows, err := stmt.QueryContext(ag.getDbCtx(), level)
-	errorHandler(err)
 	defer util.DeferClose(rows, errorHandler)
+	errorHandler(err)
 	ds := util.Rows(rows, mapperAll)
 	return ds
 }
@@ -856,8 +953,8 @@ func (ag *autoGen) SelectRoot(id int64) *entity.Role {
 	currentNode := util.Row(row, mapperAll)
 
 	secondStmt, err := tx.Prepare(sqlBuilder.String())
-	errorHandler(err)
 	defer util.DeferClose(secondStmt, errorHandler)
+	errorHandler(err)
 	row = secondStmt.QueryRowContext(ag.getDbCtx(), *currentNode.TreeNo)
 	ds := util.Row(row, mapperAll)
 	return ds
@@ -898,15 +995,18 @@ func (ag *autoGen) SelectLeaf(id int64, page, size uint) ([]*entity.Role, int64)
 	currentNode := util.Row(row, mapperAll)
 
 	secondStmt, err := tx.Prepare(sqlBuilder.String())
-	errorHandler(err)
 	defer util.DeferClose(secondStmt, errorHandler)
-	rows, err := secondStmt.QueryContext(ag.getDbCtx(), *currentNode.Left, *currentNode.Right, *currentNode.TreeNo, size, (page-1)*size)
+	errorHandler(err)
+	rows, err := secondStmt.QueryContext(
+		ag.getDbCtx(), *currentNode.Left, *currentNode.Right, *currentNode.TreeNo, size, (page-1)*size,
+	)
+	defer util.DeferClose(rows, errorHandler)
 	errorHandler(err)
 	ds := util.Rows(rows, mapperAll)
 
 	thirdStmt, err := tx.Prepare(noCondSql)
-	errorHandler(err)
 	defer util.DeferClose(thirdStmt, errorHandler)
+	errorHandler(err)
 	row = thirdStmt.QueryRowContext(ag.getDbCtx(), *currentNode.Left, *currentNode.Right, *currentNode.TreeNo)
 	total := util.Row(row, mapperNumeric[int64])
 	return ds, *total
@@ -942,9 +1042,10 @@ func (ag *autoGen) SelectAllLeaf(id int64) []*entity.Role {
 	currentNode := util.Row(row, mapperAll)
 
 	secondStmt, err := tx.Prepare(sqlBuilder.String())
-	errorHandler(err)
 	defer util.DeferClose(secondStmt, errorHandler)
+	errorHandler(err)
 	rows, err := secondStmt.QueryContext(ag.getDbCtx(), *currentNode.Left, *currentNode.Right, *currentNode.TreeNo)
+	defer util.DeferClose(rows, errorHandler)
 	errorHandler(err)
 	ds := util.Rows(rows, mapperAll)
 	return ds
@@ -967,18 +1068,21 @@ func (ag *autoGen) SelectAllRoot() []*entity.Role {
 	db := database.FetchDB()
 
 	stmt, err := db.Prepare(sqlBuilder.String())
-	errorHandler(err)
 	defer util.DeferClose(stmt, errorHandler)
+	errorHandler(err)
 	rows, err := stmt.QueryContext(ag.getDbCtx())
+	defer util.DeferClose(rows, errorHandler)
 	errorHandler(err)
 	ds := util.Rows(rows, mapperAll)
 	return ds
 }
 
 func (ag *autoGen) Insert(tx *sql.Tx, role *entity.Role) int64 {
-	ids := ag.BatchInsertWithFunc(tx, []*entity.Role{role}, 0, 0, func(f any) bool {
-		return true
-	})
+	ids := ag.BatchInsertWithFunc(
+		tx, []*entity.Role{role}, 0, 0, func(f any) bool {
+			return true
+		},
+	)
 	if len(ids) == 1 {
 		return ids[0]
 	}
@@ -986,9 +1090,11 @@ func (ag *autoGen) Insert(tx *sql.Tx, role *entity.Role) int64 {
 }
 
 func (ag *autoGen) InsertUnderNode(tx *sql.Tx, role *entity.Role, pid int64) int64 {
-	ids := ag.BatchInsertWithFunc(tx, []*entity.Role{role}, pid, 0, func(f any) bool {
-		return true
-	})
+	ids := ag.BatchInsertWithFunc(
+		tx, []*entity.Role{role}, pid, 0, func(f any) bool {
+			return true
+		},
+	)
 	if len(ids) == 1 {
 		return ids[0]
 	}
@@ -996,9 +1102,11 @@ func (ag *autoGen) InsertUnderNode(tx *sql.Tx, role *entity.Role, pid int64) int
 }
 
 func (ag *autoGen) InsertBetweenNode(tx *sql.Tx, role *entity.Role, pid, sid int64) int64 {
-	ids := ag.BatchInsertWithFunc(tx, []*entity.Role{role}, pid, sid, func(f any) bool {
-		return true
-	})
+	ids := ag.BatchInsertWithFunc(
+		tx, []*entity.Role{role}, pid, sid, func(f any) bool {
+			return true
+		},
+	)
 	if len(ids) == 1 {
 		return ids[0]
 	}
@@ -1006,9 +1114,11 @@ func (ag *autoGen) InsertBetweenNode(tx *sql.Tx, role *entity.Role, pid, sid int
 }
 
 func (ag *autoGen) BatchInsert(tx *sql.Tx, roles []*entity.Role) []int64 {
-	ids := ag.BatchInsertWithFunc(tx, roles, 0, 0, func(f any) bool {
-		return true
-	})
+	ids := ag.BatchInsertWithFunc(
+		tx, roles, 0, 0, func(f any) bool {
+			return true
+		},
+	)
 	if len(ids) == len(roles) {
 		return ids
 	}
@@ -1016,9 +1126,11 @@ func (ag *autoGen) BatchInsert(tx *sql.Tx, roles []*entity.Role) []int64 {
 }
 
 func (ag *autoGen) BatchInsertUnderNode(tx *sql.Tx, roles []*entity.Role, pid int64) []int64 {
-	ids := ag.BatchInsertWithFunc(tx, roles, pid, 0, func(f any) bool {
-		return true
-	})
+	ids := ag.BatchInsertWithFunc(
+		tx, roles, pid, 0, func(f any) bool {
+			return true
+		},
+	)
 	if len(ids) == len(roles) {
 		return ids
 	}
@@ -1026,9 +1138,11 @@ func (ag *autoGen) BatchInsertUnderNode(tx *sql.Tx, roles []*entity.Role, pid in
 }
 
 func (ag *autoGen) BatchInsertBetweenNode(tx *sql.Tx, roles []*entity.Role, pid, sid int64) []int64 {
-	ids := ag.BatchInsertWithFunc(tx, roles, pid, sid, func(f any) bool {
-		return true
-	})
+	ids := ag.BatchInsertWithFunc(
+		tx, roles, pid, sid, func(f any) bool {
+			return true
+		},
+	)
 	if len(ids) == len(roles) {
 		return ids
 	}
@@ -1036,9 +1150,11 @@ func (ag *autoGen) BatchInsertBetweenNode(tx *sql.Tx, roles []*entity.Role, pid,
 }
 
 func (ag *autoGen) InsertNonNil(tx *sql.Tx, role *entity.Role) int64 {
-	ids := ag.BatchInsertWithFunc(tx, []*entity.Role{role}, 0, 0, func(f any) bool {
-		return f != nil
-	})
+	ids := ag.BatchInsertWithFunc(
+		tx, []*entity.Role{role}, 0, 0, func(f any) bool {
+			return f != nil
+		},
+	)
 	if len(ids) == 1 {
 		return ids[0]
 	}
@@ -1046,9 +1162,11 @@ func (ag *autoGen) InsertNonNil(tx *sql.Tx, role *entity.Role) int64 {
 }
 
 func (ag *autoGen) InsertNonNilUnderNode(tx *sql.Tx, role *entity.Role, pid int64) int64 {
-	ids := ag.BatchInsertWithFunc(tx, []*entity.Role{role}, pid, 0, func(f any) bool {
-		return f != nil
-	})
+	ids := ag.BatchInsertWithFunc(
+		tx, []*entity.Role{role}, pid, 0, func(f any) bool {
+			return f != nil
+		},
+	)
 	if len(ids) == 1 {
 		return ids[0]
 	}
@@ -1056,9 +1174,11 @@ func (ag *autoGen) InsertNonNilUnderNode(tx *sql.Tx, role *entity.Role, pid int6
 }
 
 func (ag *autoGen) InsertNonNilBetweenNode(tx *sql.Tx, role *entity.Role, pid, sid int64) int64 {
-	ids := ag.BatchInsertWithFunc(tx, []*entity.Role{role}, pid, sid, func(f any) bool {
-		return f != nil
-	})
+	ids := ag.BatchInsertWithFunc(
+		tx, []*entity.Role{role}, pid, sid, func(f any) bool {
+			return f != nil
+		},
+	)
 	if len(ids) == 1 {
 		return ids[0]
 	}
@@ -1090,47 +1210,91 @@ func (ag *autoGen) InsertWithFuncBetweenNode(tx *sql.Tx, role *entity.Role, pid,
 }
 
 func (ag *autoGen) BatchInsertWithFunc(tx *sql.Tx, roles []*entity.Role, pid, sid int64, fn func(f any) bool) []int64 {
-
-	// TODO implement me
-	panic("implement me")
+	recorder := logger.AccessLogger(ag.ctx)
+	recorder.Sugar().Infof("插入至 PID: %+v SID: %+v 的同代数据", pid, sid)
+	ids := make([]int64, len(roles))
+	for i, role := range roles {
+		ids[i] = ag.internalInsertWithFunc(tx, role, pid, sid, fn)
+	}
+	return ids
 }
 
 func (ag *autoGen) DeleteByID(tx *sql.Tx, id int64) bool {
-	// TODO implement me
-	panic("implement me")
+	return ag.BatchDeleteByID(tx, []int64{id})
 }
 
 func (ag *autoGen) DeleteByIDs(tx *sql.Tx, ids ...int64) bool {
-	// TODO implement me
-	panic("implement me")
+	return ag.BatchDeleteByID(tx, ids)
 }
 
 func (ag *autoGen) BatchDeleteByID(tx *sql.Tx, ids []int64) bool {
-	// TODO implement me
-	panic("implement me")
+	recorder := logger.AccessLogger(ag.ctx)
+	recorder.Sugar().Infof("删除 ID 列表: %+v 的数据", ids)
+
+	for _, id := range ids {
+		ds := ag.internalDirectDelete(tx, id)
+		if !ds {
+			panic("存在数据删除错误")
+		}
+	}
+
+	return true
 }
 
 func (ag *autoGen) UpdateByID(tx *sql.Tx, role *entity.Role) bool {
-	// TODO implement me
-	panic("implement me")
+	return ag.BatchUpdateWithFuncByID(
+		tx, []*entity.Role{role}, func(f any) bool {
+			return true
+		},
+	)
 }
 
 func (ag *autoGen) UpdateNonNilByID(tx *sql.Tx, role *entity.Role) bool {
-	// TODO implement me
-	panic("implement me")
+	return ag.BatchUpdateWithFuncByID(
+		tx, []*entity.Role{role}, func(f any) bool {
+			return f != nil
+		},
+	)
 }
 
 func (ag *autoGen) UpdateWithFuncByID(tx *sql.Tx, role *entity.Role, fn func(f any) bool) bool {
-	// TODO implement me
-	panic("implement me")
+	return ag.BatchUpdateWithFuncByID(tx, []*entity.Role{role}, fn)
 }
 
 func (ag *autoGen) BatchUpdateWithFuncByID(tx *sql.Tx, roles []*entity.Role, fn func(f any) bool) bool {
-	// TODO implement me
-	panic("implement me")
-}
+	recorder := logger.AccessLogger(ag.ctx)
+	recorder.Sugar().Infof("批量更新列表数据")
+	for _, role := range roles {
+		if role.ID == nil {
+			panic("ID 字段不能为空")
+		}
 
-func (ag *autoGen) SwitchNode(fromId, toId int64) bool {
-	// TODO implement me
-	panic("implement me")
+		id := *role.ID
+
+		fields, values := calcUpdateField(role, fn)
+		var sqlBuilder strings.Builder
+		sqlBuilder.WriteString("update ")
+		sqlBuilder.WriteString("<table> ")
+		sqlBuilder.WriteString(fields)
+		sqlBuilder.WriteString(" where ")
+		sqlBuilder.WriteString("<p_key> = ?")
+		sqlBuilder.WriteString("<deleted_cond>")
+		sqlBuilder.WriteString(";")
+
+		values = append(values, id)
+
+		errorHandler := util.ErrToLogAndPanic(recorder)
+		stmt, err := tx.Prepare(sqlBuilder.String())
+		errorHandler(err)
+		result, err := stmt.ExecContext(ag.getDbCtx(), values...)
+		errorHandler(err)
+		af, err := result.RowsAffected()
+		errorHandler(err)
+		if af != 1 {
+			panic("更新错误")
+		}
+		err = stmt.Close()
+	}
+
+	return true
 }

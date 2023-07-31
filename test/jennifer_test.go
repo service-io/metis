@@ -45,6 +45,10 @@ func TestJennifer0(t *testing.T) {
 	err = f.Render(wr)
 }
 
+func genRepositoryFile(table string, columns []Column) *File {
+	return nil
+}
+
 func TestJennifer1(t *testing.T) {
 	f := genRepositoryFile("account", nil)
 	fmt.Printf("%#v\n", f)
