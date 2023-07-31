@@ -1,4 +1,5 @@
 package dto
 
-type Role struct {
-}
+import "metis/test/first/entity"
+
+type Role entity.Role

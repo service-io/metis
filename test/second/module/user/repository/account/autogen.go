@@ -54,7 +54,7 @@ func (ag *autoGen) SelectByID(id int64) dto.Account {
 	db := database.FetchDB()
 	sqlPlaceholder := "SELECT id, title, start_at FROM account WHERE id = ?;"
 	prepare, _ := db.Prepare(sqlPlaceholder)
-	defer util.DeferClose(prepare, util.ErrToLog(recorder))
+	defer util.DeferClose(prepare, util.ErrToLogAndPanic(recorder))
 	row := prepare.QueryRowContext(ag.getDbCtx(), id)
 	account := util.Row(row, mapperAll)
 	return account
@@ -71,7 +71,7 @@ func (ag *autoGen) BatchSelectByID(ids []int64) []dto.Account {
 	db := database.FetchDB()
 	sqlPlaceholder := fmt.Sprintf("SELECT id, title, start_at FROM account WHERE id = (%s);", strings.Join(placeholder, ", "))
 	prepare, _ := db.Prepare(sqlPlaceholder)
-	defer util.DeferClose(prepare, util.ErrToLog(recorder))
+	defer util.DeferClose(prepare, util.ErrToLogAndPanic(recorder))
 	bindValues := make([]any, len(ids))
 	for i, id := range ids {
 		bindValues[i] = id
@@ -95,7 +95,7 @@ func (ag *autoGen) Insert(tx *sql.Tx, account *entity.Account) int64 {
 	recorder := logger.AccessLogger(ag.ctx)
 	sqlPlaceholder := "INSERT INTO account(id, title, start_at) VALUES (?, ?, ?);"
 	prepare, err := tx.Prepare(sqlPlaceholder)
-	defer util.DeferClose(prepare, util.ErrToLog(recorder))
+	defer util.DeferClose(prepare, util.ErrToLogAndPanic(recorder))
 	util.PanicErr(recorder, err)
 	return ag.internalInsert(prepare, account)
 }
@@ -104,7 +104,7 @@ func (ag *autoGen) BatchInsert(tx *sql.Tx, accounts []*entity.Account) []int64 {
 	recorder := logger.AccessLogger(ag.ctx)
 	sqlPlaceholder := "INSERT INTO account(id, title, start_at) VALUES (?, ?, ?);"
 	prepare, err := tx.Prepare(sqlPlaceholder)
-	defer util.DeferClose(prepare, util.ErrToLog(recorder))
+	defer util.DeferClose(prepare, util.ErrToLogAndPanic(recorder))
 	util.PanicErr(recorder, err)
 	for i, account := range accounts {
 		retids[i] = ag.internalInsert(prepare, account)
@@ -138,7 +138,7 @@ func (ag *autoGen) InsertWithFunc(tx *sql.Tx, account *entity.Account, fn func(f
 	}
 	sqlPlaceholder := fmt.Sprintf("INSERT INTO account(%s) VALUES (%s);", needField.String()[:needField.Len()-2], needPlace.String()[:needPlace.Len()-2])
 	prepare, err := tx.Prepare(sqlPlaceholder)
-	defer util.DeferClose(prepare, util.ErrToLog(recorder))
+	defer util.DeferClose(prepare, util.ErrToLogAndPanic(recorder))
 	util.PanicErr(recorder, err)
 	return ag.internalInsert(prepare, account)
 }
@@ -153,7 +153,7 @@ func (ag *autoGen) DeleteByID(tx *sql.Tx, id int64) bool {
 	recorder := logger.AccessLogger(ag.ctx)
 	sqlPlaceholder := "UPDATE accountSET deleted = 1 WHERE id = ?;"
 	prepare, err := tx.Prepare(sqlPlaceholder)
-	defer util.DeferClose(prepare, util.ErrToLog(recorder))
+	defer util.DeferClose(prepare, util.ErrToLogAndPanic(recorder))
 	util.PanicErr(recorder, err)
 	result, err := prepare.ExecContext(ag.getDbCtx(), id)
 	util.PanicErr(recorder, err)
@@ -172,7 +172,7 @@ func (ag *autoGen) BatchDeleteByID(tx *sql.Tx, ids []int64) bool {
 	recorder := logger.AccessLogger(ag.ctx)
 	sqlPlaceholder := fmt.Sprintf("UPDATE accountSET deleted = 1 WHERE id IN (%s);", strings.Join(placeholder, ", "))
 	prepare, _ := tx.Prepare(sqlPlaceholder)
-	defer util.DeferClose(prepare, util.ErrToLog(recorder))
+	defer util.DeferClose(prepare, util.ErrToLogAndPanic(recorder))
 	bindValues := make([]any, len(ids))
 	for i, id := range ids {
 		bindValues[i] = id
@@ -189,7 +189,7 @@ func (ag *autoGen) UpdateByID(tx *sql.Tx, account *entity.Account) bool {
 	recorder := logger.AccessLogger(ag.ctx)
 	sqlPlaceholder := "UPDATE account SET id = ?, title = ?, start_at = ? WHERE id IN ?;"
 	prepare, err := tx.Prepare(sqlPlaceholder)
-	defer util.DeferClose(prepare, util.ErrToLog(recorder))
+	defer util.DeferClose(prepare, util.ErrToLogAndPanic(recorder))
 	util.PanicErr(recorder, err)
 	result, err := prepare.ExecContext(ag.getDbCtx(), *account.ID, *account.Title, *account.StartAt)
 	util.PanicErr(recorder, err)
@@ -220,7 +220,7 @@ func (ag *autoGen) UpdateWithFuncByID(tx *sql.Tx, account *entity.Account, fn fu
 	bindValue = append(bindValue, *account.ID)
 	sqlPlaceholder := fmt.Sprintf("UPDATE account SET %s WHERE id = ?;", needFieldAndPlace.String()[:needFieldAndPlace.Len()-2])
 	prepare, err := tx.Prepare(sqlPlaceholder)
-	defer util.DeferClose(prepare, util.ErrToLog(recorder))
+	defer util.DeferClose(prepare, util.ErrToLogAndPanic(recorder))
 	util.PanicErr(recorder, err)
 	result, err := prepare.ExecContext(ag.getDbCtx(), bindValue...)
 	util.PanicErr(recorder, err)

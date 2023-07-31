@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"go.uber.org/zap"
 	"io"
+	"strings"
 )
 
 func DeferClose(closer io.Closer, errHandler ...func(err error)) {
@@ -37,6 +38,15 @@ func ErrToLog(logger *zap.Logger) func(err error) {
 	}
 }
 
+func ErrToLogAndPanic(logger *zap.Logger) func(err error) {
+	return func(err error) {
+		if err != nil {
+			logger.Error(err.Error())
+			panic(err)
+		}
+	}
+}
+
 func LogErr(logger *zap.Logger, err error) {
 	if err != nil {
 		logger.Error(err.Error())
@@ -50,24 +60,63 @@ func PanicErr(logger *zap.Logger, err error) {
 	}
 }
 
-func Rows[T any](rows *sql.Rows, supplier func() (*T, []any)) []T {
-	rs := make([]T, 0)
+func HandleTx(tx *sql.Tx, eh func(err error)) {
+	err := recover()
+	if err != nil {
+		err := tx.Rollback()
+		eh(err)
+	} else {
+		err := tx.Commit()
+		eh(err)
+	}
+}
+
+func Rows[T any](rows *sql.Rows, supplier func() (*T, []any)) []*T {
+	rs := make([]*T, 0)
 	for rows.Next() {
 		r, cs := supplier()
 		if err := rows.Scan(cs...); err != nil {
 			panic(err)
 		}
-		rs = append(rs, *r)
+		rs = append(rs, r)
 	}
 	return rs
 }
 
-func Row[T any](row *sql.Row, supplier func() (*T, []any)) T {
+func Row[T any](row *sql.Row, supplier func() (*T, []any)) *T {
 	r, cs := supplier()
 	if err := row.Scan(cs...); err != nil {
 		panic(err)
 	}
-	return *r
+	return r
+}
+
+func GenPlaceholder(ids []int64) string {
+	if len(ids) == 0 {
+		panic("无 ID 信息")
+	}
+	ph := make([]string, len(ids))
+	for i := range ids {
+		ph[i] = "?"
+	}
+	return strings.Join(ph, ", ")
+}
+
+func ToAnyItems[T any](ps []T) []any {
+	nps := make([]any, len(ps))
+	for i, p := range ps {
+		nps[i] = p
+	}
+	return nps
+}
+
+func ToAny[T any](p T) any {
+	var np any = p
+	return np
+}
+
+func ToPtr[T any](p T) *T {
+	return &p
 }
 
 // SplitFunc 使用函数进行分割, 注意: 并不会移除符合谓词的字符,

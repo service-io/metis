@@ -2,7 +2,7 @@
 
 // Package survey
 // @author tabuyos
-// @since 2023/07/30
+// @since 2023/07/31
 // @description survey
 package survey
 
@@ -15,7 +15,7 @@ import (
 	"go.uber.org/zap"
 	"metis/config/constant"
 	"metis/database"
-	"metis/test/first/entity"
+	entity "metis/test/second/model/entity"
 	"metis/util"
 	"metis/util/logger"
 	"strings"
@@ -51,9 +51,9 @@ func (ag *autoGen) getDbCtx() context.Context {
 func (ag *autoGen) SelectByID(id int64) entity.Survey {
 	recorder := logger.AccessLogger(ag.ctx)
 	db := database.FetchDB()
-	sqlPlaceholder := "SELECT id, title, start_at FROM survey WHERE id = ?;"
+	sqlPlaceholder := "SELECT id, title, description, start_at, end_at, status, top, creator_by, updater_by, created_at, updated_at FROM survey WHERE id = ?;"
 	prepare, _ := db.Prepare(sqlPlaceholder)
-	defer util.DeferClose(prepare, util.ErrToLog(recorder))
+	defer util.DeferClose(prepare, util.ErrToLogAndPanic(recorder))
 	row := prepare.QueryRowContext(ag.getDbCtx(), id)
 	survey := util.Row(row, mapperAll)
 	return survey
@@ -68,9 +68,9 @@ func (ag *autoGen) BatchSelectByID(ids []int64) []entity.Survey {
 	}
 	recorder := logger.AccessLogger(ag.ctx)
 	db := database.FetchDB()
-	sqlPlaceholder := fmt.Sprintf("SELECT id, title, start_at FROM survey WHERE id = (%s);", strings.Join(placeholder, ", "))
+	sqlPlaceholder := fmt.Sprintf("SELECT id, title, description, start_at, end_at, status, top, creator_by, updater_by, created_at, updated_at FROM survey WHERE id = (%s);", strings.Join(placeholder, ", "))
 	prepare, _ := db.Prepare(sqlPlaceholder)
-	defer util.DeferClose(prepare, util.ErrToLog(recorder))
+	defer util.DeferClose(prepare, util.ErrToLogAndPanic(recorder))
 	bindValues := make([]any, len(ids))
 	for i, id := range ids {
 		bindValues[i] = id
@@ -84,7 +84,7 @@ func (ag *autoGen) BatchSelectByID(ids []int64) []entity.Survey {
 }
 func (ag *autoGen) internalInsert(prepare *sql.Stmt, survey *entity.Survey) int64 {
 	recorder := logger.AccessLogger(ag.ctx)
-	result, err := prepare.ExecContext(ag.getDbCtx(), *survey.ID, *survey.Title, *survey.StartAt)
+	result, err := prepare.ExecContext(ag.getDbCtx(), *survey.ID, *survey.Title, *survey.Description, *survey.StartAt, *survey.EndAt, *survey.Status, *survey.Top, *survey.CreatorBy, *survey.UpdaterBy, *survey.CreatedAt, *survey.UpdatedAt)
 	util.PanicErr(recorder, err)
 	id, err := result.LastInsertId()
 	util.PanicErr(recorder, err)
@@ -92,18 +92,18 @@ func (ag *autoGen) internalInsert(prepare *sql.Stmt, survey *entity.Survey) int6
 }
 func (ag *autoGen) Insert(tx *sql.Tx, survey *entity.Survey) int64 {
 	recorder := logger.AccessLogger(ag.ctx)
-	sqlPlaceholder := "INSERT INTO survey(id, title, start_at) VALUES (?, ?, ?);"
+	sqlPlaceholder := "INSERT INTO survey(id, title, description, start_at, end_at, status, top, creator_by, updater_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);"
 	prepare, err := tx.Prepare(sqlPlaceholder)
-	defer util.DeferClose(prepare, util.ErrToLog(recorder))
+	defer util.DeferClose(prepare, util.ErrToLogAndPanic(recorder))
 	util.PanicErr(recorder, err)
 	return ag.internalInsert(prepare, survey)
 }
 func (ag *autoGen) BatchInsert(tx *sql.Tx, surveys []*entity.Survey) []int64 {
 	retids := make([]int64, len(surveys))
 	recorder := logger.AccessLogger(ag.ctx)
-	sqlPlaceholder := "INSERT INTO survey(id, title, start_at) VALUES (?, ?, ?);"
+	sqlPlaceholder := "INSERT INTO survey(id, title, description, start_at, end_at, status, top, creator_by, updater_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);"
 	prepare, err := tx.Prepare(sqlPlaceholder)
-	defer util.DeferClose(prepare, util.ErrToLog(recorder))
+	defer util.DeferClose(prepare, util.ErrToLogAndPanic(recorder))
 	util.PanicErr(recorder, err)
 	for i, survey := range surveys {
 		retids[i] = ag.internalInsert(prepare, survey)
@@ -130,14 +130,54 @@ func (ag *autoGen) InsertWithFunc(tx *sql.Tx, survey *entity.Survey, fn func(f a
 		needPlace.WriteString("?, ")
 		bindValue = append(bindValue, *survey.Title)
 	}
+	if fn(survey.Description) {
+		needField.WriteString("description, ")
+		needPlace.WriteString("?, ")
+		bindValue = append(bindValue, *survey.Description)
+	}
 	if fn(survey.StartAt) {
 		needField.WriteString("start_at, ")
 		needPlace.WriteString("?, ")
 		bindValue = append(bindValue, *survey.StartAt)
 	}
+	if fn(survey.EndAt) {
+		needField.WriteString("end_at, ")
+		needPlace.WriteString("?, ")
+		bindValue = append(bindValue, *survey.EndAt)
+	}
+	if fn(survey.Status) {
+		needField.WriteString("status, ")
+		needPlace.WriteString("?, ")
+		bindValue = append(bindValue, *survey.Status)
+	}
+	if fn(survey.Top) {
+		needField.WriteString("top, ")
+		needPlace.WriteString("?, ")
+		bindValue = append(bindValue, *survey.Top)
+	}
+	if fn(survey.CreatorBy) {
+		needField.WriteString("creator_by, ")
+		needPlace.WriteString("?, ")
+		bindValue = append(bindValue, *survey.CreatorBy)
+	}
+	if fn(survey.UpdaterBy) {
+		needField.WriteString("updater_by, ")
+		needPlace.WriteString("?, ")
+		bindValue = append(bindValue, *survey.UpdaterBy)
+	}
+	if fn(survey.CreatedAt) {
+		needField.WriteString("created_at, ")
+		needPlace.WriteString("?, ")
+		bindValue = append(bindValue, *survey.CreatedAt)
+	}
+	if fn(survey.UpdatedAt) {
+		needField.WriteString("updated_at, ")
+		needPlace.WriteString("?, ")
+		bindValue = append(bindValue, *survey.UpdatedAt)
+	}
 	sqlPlaceholder := fmt.Sprintf("INSERT INTO survey(%s) VALUES (%s);", needField.String()[:needField.Len()-2], needPlace.String()[:needPlace.Len()-2])
 	prepare, err := tx.Prepare(sqlPlaceholder)
-	defer util.DeferClose(prepare, util.ErrToLog(recorder))
+	defer util.DeferClose(prepare, util.ErrToLogAndPanic(recorder))
 	util.PanicErr(recorder, err)
 	return ag.internalInsert(prepare, survey)
 }
@@ -152,7 +192,7 @@ func (ag *autoGen) DeleteByID(tx *sql.Tx, id int64) bool {
 	recorder := logger.AccessLogger(ag.ctx)
 	sqlPlaceholder := "UPDATE surveySET deleted = 1 WHERE id = ?;"
 	prepare, err := tx.Prepare(sqlPlaceholder)
-	defer util.DeferClose(prepare, util.ErrToLog(recorder))
+	defer util.DeferClose(prepare, util.ErrToLogAndPanic(recorder))
 	util.PanicErr(recorder, err)
 	result, err := prepare.ExecContext(ag.getDbCtx(), id)
 	util.PanicErr(recorder, err)
@@ -171,7 +211,7 @@ func (ag *autoGen) BatchDeleteByID(tx *sql.Tx, ids []int64) bool {
 	recorder := logger.AccessLogger(ag.ctx)
 	sqlPlaceholder := fmt.Sprintf("UPDATE surveySET deleted = 1 WHERE id IN (%s);", strings.Join(placeholder, ", "))
 	prepare, _ := tx.Prepare(sqlPlaceholder)
-	defer util.DeferClose(prepare, util.ErrToLog(recorder))
+	defer util.DeferClose(prepare, util.ErrToLogAndPanic(recorder))
 	bindValues := make([]any, len(ids))
 	for i, id := range ids {
 		bindValues[i] = id
@@ -186,11 +226,11 @@ func (ag *autoGen) BatchDeleteByID(tx *sql.Tx, ids []int64) bool {
 }
 func (ag *autoGen) UpdateByID(tx *sql.Tx, survey *entity.Survey) bool {
 	recorder := logger.AccessLogger(ag.ctx)
-	sqlPlaceholder := "UPDATE survey SET id = ?, title = ?, start_at = ? WHERE id IN ?;"
+	sqlPlaceholder := "UPDATE survey SET id = ?, title = ?, description = ?, start_at = ?, end_at = ?, status = ?, top = ?, creator_by = ?, updater_by = ?, created_at = ?, updated_at = ? WHERE id IN ?;"
 	prepare, err := tx.Prepare(sqlPlaceholder)
-	defer util.DeferClose(prepare, util.ErrToLog(recorder))
+	defer util.DeferClose(prepare, util.ErrToLogAndPanic(recorder))
 	util.PanicErr(recorder, err)
-	result, err := prepare.ExecContext(ag.getDbCtx(), *survey.ID, *survey.Title, *survey.StartAt)
+	result, err := prepare.ExecContext(ag.getDbCtx(), *survey.ID, *survey.Title, *survey.Description, *survey.StartAt, *survey.EndAt, *survey.Status, *survey.Top, *survey.CreatorBy, *survey.UpdaterBy, *survey.CreatedAt, *survey.UpdatedAt)
 	util.PanicErr(recorder, err)
 	af, err := result.RowsAffected()
 	util.PanicErr(recorder, err)
@@ -212,14 +252,46 @@ func (ag *autoGen) UpdateWithFuncByID(tx *sql.Tx, survey *entity.Survey, fn func
 		needFieldAndPlace.WriteString("title = ?, ")
 		bindValue = append(bindValue, *survey.Title)
 	}
+	if fn(survey.Description) {
+		needFieldAndPlace.WriteString("description = ?, ")
+		bindValue = append(bindValue, *survey.Description)
+	}
 	if fn(survey.StartAt) {
 		needFieldAndPlace.WriteString("start_at = ?, ")
 		bindValue = append(bindValue, *survey.StartAt)
 	}
+	if fn(survey.EndAt) {
+		needFieldAndPlace.WriteString("end_at = ?, ")
+		bindValue = append(bindValue, *survey.EndAt)
+	}
+	if fn(survey.Status) {
+		needFieldAndPlace.WriteString("status = ?, ")
+		bindValue = append(bindValue, *survey.Status)
+	}
+	if fn(survey.Top) {
+		needFieldAndPlace.WriteString("top = ?, ")
+		bindValue = append(bindValue, *survey.Top)
+	}
+	if fn(survey.CreatorBy) {
+		needFieldAndPlace.WriteString("creator_by = ?, ")
+		bindValue = append(bindValue, *survey.CreatorBy)
+	}
+	if fn(survey.UpdaterBy) {
+		needFieldAndPlace.WriteString("updater_by = ?, ")
+		bindValue = append(bindValue, *survey.UpdaterBy)
+	}
+	if fn(survey.CreatedAt) {
+		needFieldAndPlace.WriteString("created_at = ?, ")
+		bindValue = append(bindValue, *survey.CreatedAt)
+	}
+	if fn(survey.UpdatedAt) {
+		needFieldAndPlace.WriteString("updated_at = ?, ")
+		bindValue = append(bindValue, *survey.UpdatedAt)
+	}
 	bindValue = append(bindValue, *survey.ID)
 	sqlPlaceholder := fmt.Sprintf("UPDATE survey SET %s WHERE id = ?;", needFieldAndPlace.String()[:needFieldAndPlace.Len()-2])
 	prepare, err := tx.Prepare(sqlPlaceholder)
-	defer util.DeferClose(prepare, util.ErrToLog(recorder))
+	defer util.DeferClose(prepare, util.ErrToLogAndPanic(recorder))
 	util.PanicErr(recorder, err)
 	result, err := prepare.ExecContext(ag.getDbCtx(), bindValue...)
 	util.PanicErr(recorder, err)
@@ -242,6 +314,6 @@ func (ag *autoGen) BatchUpdateWithFuncByID(tx *sql.Tx, surveys []*entity.Survey,
 }
 func mapperAll() (*entity.Survey, []any) {
 	var r = &entity.Survey{}
-	var cs = []any{&r.ID, &r.Title, &r.StartAt}
+	var cs = []any{&r.ID, &r.Title, &r.Description, &r.StartAt, &r.EndAt, &r.Status, &r.Top, &r.CreatorBy, &r.UpdaterBy, &r.CreatedAt, &r.UpdatedAt}
 	return r, cs
 }

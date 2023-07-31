@@ -21,3 +21,24 @@ type ModifyInfo struct {
 	ModifyBy *int64     `json:"createBy"`
 	ModifyAt *time.Time `json:"createAt"`
 }
+
+type IEntity interface {
+	// PKey 主键
+	PKey() string
+	// NameKey 名称
+	NameKey() string
+	// LDKey 逻辑删除
+	LDKey() string
+}
+
+type ITreeEntity interface {
+	IEntity
+	// LKey 左值
+	LKey() string
+	// RKey 右值
+	RKey() string
+	// LlKey 层级
+	LlKey() string
+	// TNKey 树号
+	TNKey() string
+}

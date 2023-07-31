@@ -2,7 +2,7 @@
 
 // Package entity
 // @author tabuyos
-// @since 2023/07/30
+// @since 2023/07/31
 // @description survey
 package entity
 
@@ -13,8 +13,16 @@ import (
 
 type Survey struct {
 	*IDInfo
-	Title   *string
-	StartAt *time.Time
+	Title       *string
+	Description *string
+	StartAt     *time.Time
+	EndAt       *time.Time
+	Status      *int8
+	Top         *int8
+	CreatorBy   *int64
+	UpdaterBy   *int64
+	CreatedAt   *time.Time
+	UpdatedAt   *time.Time
 }
 
 func NewSurvey() *Survey {

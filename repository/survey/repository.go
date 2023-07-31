@@ -37,10 +37,10 @@ func (receiver *repository) SelectWithPage(page uint, size uint) []dto.Survey {
 	db := database.FetchDB()
 
 	prepare, _ := db.Prepare("select id, title, status, start_at from survey limit ? offset ?")
-	defer util.DeferClose(prepare, util.ErrToLog(accessLogger))
+	defer util.DeferClose(prepare, util.ErrToLogAndPanic(accessLogger))
 
 	rows, err := prepare.QueryContext(receiver.getDbCtx(), size, (page-1)*size)
-	defer util.DeferClose(rows, util.ErrToLog(accessLogger))
+	defer util.DeferClose(rows, util.ErrToLogAndPanic(accessLogger))
 
 	if err != nil {
 		accessLogger.Error(err.Error(), zap.Error(err))
@@ -59,7 +59,7 @@ func (receiver *repository) SelectById(id int64) dto.Survey {
 	db := database.FetchDB()
 
 	prepare, _ := db.Prepare("select id, title, status, start_at from survey where id = ?")
-	defer util.DeferClose(prepare, util.ErrToLog(accessLogger))
+	defer util.DeferClose(prepare, util.ErrToLogAndPanic(accessLogger))
 
 	row := prepare.QueryRowContext(receiver.getDbCtx(), id)
 	survey := util.Row(row, func() (*dto.Survey, []any) {

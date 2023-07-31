@@ -60,7 +60,7 @@ func (ag *autoGen) SelectByID(id int64) dto.Account {
 	sqlPlaceholder := "SELECT id, title, name FROM account WHERE id = ?;"
 
 	prepare, _ := db.Prepare(sqlPlaceholder)
-	defer util.DeferClose(prepare, util.ErrToLog(recorder))
+	defer util.DeferClose(prepare, util.ErrToLogAndPanic(recorder))
 
 	row := prepare.QueryRowContext(ag.getDbCtx(), id)
 
@@ -92,7 +92,7 @@ func (ag *autoGen) BatchSelectByID(ids []int64) []dto.Account {
 	sqlPlaceholder := fmt.Sprintf("SELECT id, title, name FROM account WHERE id IN (%s);", strings.Join(placeholder, ", "))
 
 	prepare, _ := db.Prepare(sqlPlaceholder)
-	defer util.DeferClose(prepare, util.ErrToLog(recorder))
+	defer util.DeferClose(prepare, util.ErrToLogAndPanic(recorder))
 
 	bindValues := make([]any, len(ids))
 	for i, id := range ids {
@@ -122,7 +122,7 @@ func (ag *autoGen) SelectByName(name string) []dto.Account {
 	sqlPlaceholder := "SELECT id, title, name FROM account WHERE name LIKE ?;"
 
 	prepare, _ := db.Prepare(sqlPlaceholder)
-	defer util.DeferClose(prepare, util.ErrToLog(recorder))
+	defer util.DeferClose(prepare, util.ErrToLogAndPanic(recorder))
 
 	rows, err := prepare.QueryContext(ag.getDbCtx(), name)
 
@@ -158,7 +158,7 @@ func (ag *autoGen) Insert(tx *sql.Tx, account *entity.Account) int64 {
 
 	sqlPlaceholder := "INSERT INTO account(id, name, title) VALUES (?, ?, ?);"
 	prepare, err := tx.Prepare(sqlPlaceholder)
-	defer util.DeferClose(prepare, util.ErrToLog(recorder))
+	defer util.DeferClose(prepare, util.ErrToLogAndPanic(recorder))
 	util.PanicErr(recorder, err)
 
 	return ag.internalInsert(prepare, account)
@@ -171,7 +171,7 @@ func (ag *autoGen) BatchInsert(tx *sql.Tx, accounts []*entity.Account) []int64 {
 
 	sqlPlaceholder := "INSERT INTO account(id, name, title) VALUES (?, ?, ?);"
 	prepare, err := tx.Prepare(sqlPlaceholder)
-	defer util.DeferClose(prepare, util.ErrToLog(recorder))
+	defer util.DeferClose(prepare, util.ErrToLogAndPanic(recorder))
 	util.PanicErr(recorder, err)
 
 	for i, account := range accounts {
@@ -216,7 +216,7 @@ func (ag *autoGen) InsertWithFunc(tx *sql.Tx, account *entity.Account, fn func(f
 		needField.String()[:needField.Len()-2],
 		needPlace.String()[:needPlace.Len()-2])
 	prepare, err := tx.Prepare(sqlPlaceholder)
-	defer util.DeferClose(prepare, util.ErrToLog(recorder))
+	defer util.DeferClose(prepare, util.ErrToLogAndPanic(recorder))
 	util.PanicErr(recorder, err)
 
 	return ag.internalInsert(prepare, account)
@@ -236,7 +236,7 @@ func (ag *autoGen) DeleteByID(tx *sql.Tx, id int64) bool {
 
 	sqlPlaceholder := "DELETE FROM account WHERE id = ?;"
 	prepare, err := tx.Prepare(sqlPlaceholder)
-	defer util.DeferClose(prepare, util.ErrToLog(recorder))
+	defer util.DeferClose(prepare, util.ErrToLogAndPanic(recorder))
 	util.PanicErr(recorder, err)
 
 	result, err := prepare.ExecContext(ag.getDbCtx(), id)
@@ -266,7 +266,7 @@ func (ag *autoGen) BatchDeleteByID(tx *sql.Tx, ids []int64) bool {
 	sqlPlaceholder := fmt.Sprintf("DELETE FROM account WHERE id IN (%s);", strings.Join(placeholder, ", "))
 
 	prepare, _ := tx.Prepare(sqlPlaceholder)
-	defer util.DeferClose(prepare, util.ErrToLog(recorder))
+	defer util.DeferClose(prepare, util.ErrToLogAndPanic(recorder))
 
 	bindValues := make([]any, len(ids))
 	for i, id := range ids {
@@ -290,7 +290,7 @@ func (ag *autoGen) UpdateByID(tx *sql.Tx, account *entity.Account) bool {
 
 	sqlPlaceholder := "UPDATE account SET name = ?, title = ? WHERE id = ?;"
 	prepare, err := tx.Prepare(sqlPlaceholder)
-	defer util.DeferClose(prepare, util.ErrToLog(recorder))
+	defer util.DeferClose(prepare, util.ErrToLogAndPanic(recorder))
 	util.PanicErr(recorder, err)
 
 	result, err := prepare.ExecContext(ag.getDbCtx(), *account.Name, *account.Title, *account.ID)
@@ -334,7 +334,7 @@ func (ag *autoGen) UpdateWithFuncByID(tx *sql.Tx, account *entity.Account, fn fu
 		"UPDATE account SET %s WHERE id = ?;",
 		needFieldAndPlace.String()[:needFieldAndPlace.Len()-2])
 	prepare, err := tx.Prepare(sqlPlaceholder)
-	defer util.DeferClose(prepare, util.ErrToLog(recorder))
+	defer util.DeferClose(prepare, util.ErrToLogAndPanic(recorder))
 	util.PanicErr(recorder, err)
 
 	result, err := prepare.ExecContext(ag.getDbCtx(), bindValue...)
