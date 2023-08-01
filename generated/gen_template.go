@@ -6,6 +6,7 @@ package generated
 
 import (
 	"github.com/dave/jennifer/jen"
+	"metis/generated/helper"
 	"metis/generated/repository"
 )
 
@@ -15,11 +16,11 @@ func RenderFile(table string) *jen.File {
 	return r.GenFile(table, columns)
 }
 
-func getColumns(table string) []Column {
-	var columns []Column
+func getColumns(table string) []helper.Column {
+	var columns []helper.Column
 
 	columns = append(
-		columns, Column{
+		columns, helper.Column{
 			ColumnName:      "id",
 			Type:            "bigint",
 			Nullable:        "NO",
@@ -33,7 +34,7 @@ func getColumns(table string) []Column {
 		},
 	)
 	columns = append(
-		columns, Column{
+		columns, helper.Column{
 			ColumnName:      "title",
 			Type:            "varchar",
 			Nullable:        "NO",
@@ -47,7 +48,7 @@ func getColumns(table string) []Column {
 		},
 	)
 	columns = append(
-		columns, Column{
+		columns, helper.Column{
 			ColumnName:      "start_at",
 			Type:            "timestamp",
 			Nullable:        "NO",
@@ -61,7 +62,7 @@ func getColumns(table string) []Column {
 		},
 	)
 	columns = append(
-		columns, Column{
+		columns, helper.Column{
 			ColumnName:      "ns_id",
 			Type:            "bigint",
 			Nullable:        "NO",

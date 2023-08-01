@@ -5,8 +5,12 @@ import (
 	"github.com/dave/jennifer/jen"
 	"github.com/iancoleman/strcase"
 	"metis/generated"
+	"metis/test/second/model/dto"
+	"metis/test/second/model/entity"
+	"metis/util"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -125,10 +129,21 @@ func genInterfaceAutoGen(table string, columns []Column) jen.Code {
 	camel := strcase.ToCamel(table)
 	lowerCamel := strcase.ToLowerCamel(table)
 	return jen.Comment("iAutoGen 该接口自动生成, 请勿修改").Line().Type().Id("iAutoGen").Interface(
-		inferColumn(jen.Id("SelectByID").Params(jen.Id("id").Id("int64")).Params(jen.Op("*").Add(useEntity(camel))), "id", columns),
-		inferColumn(jen.Id("SelectByIDs").Params(jen.Id("ids").Op("...").Id("int64")).Params(jen.Index().Op("*").Add(useEntity(camel))), "id", columns),
-		inferColumn(jen.Id("BatchSelectByID").Params(jen.Id("ids").Index().Id("int64")).Params(jen.Index().Op("*").Add(useEntity(camel))), "id", columns),
-		inferColumn(jen.Id("SelectByName").Params(jen.Id("name").Id("string")).Params(jen.Index().Op("*").Add(useEntity(camel))), "name", columns),
+		inferColumn(
+			jen.Id("SelectByID").Params(jen.Id("id").Id("int64")).Params(jen.Op("*").Add(useEntity(camel))), "id", columns,
+		),
+		inferColumn(
+			jen.Id("SelectByIDs").Params(jen.Id("ids").Op("...").Id("int64")).Params(jen.Index().Op("*").Add(useEntity(camel))),
+			"id", columns,
+		),
+		inferColumn(
+			jen.Id("BatchSelectByID").Params(jen.Id("ids").Index().Id("int64")).Params(jen.Index().Op("*").Add(useEntity(camel))),
+			"id", columns,
+		),
+		inferColumn(
+			jen.Id("SelectByName").Params(jen.Id("name").Id("string")).Params(jen.Index().Op("*").Add(useEntity(camel))),
+			"name", columns,
+		),
 		jen.Id("SelectMaxLevel").Params(jen.Id("treeNo").Id("int")).Params(jen.Id("int")),
 		jen.Id("SelectMaxRight").Params(jen.Id("treeNo").Id("int")).Params(jen.Id("int")),
 		jen.Id("SelectMaxLeft").Params(jen.Id("treeNo").Id("int")).Params(jen.Id("int")),
@@ -138,34 +153,107 @@ func genInterfaceAutoGen(table string, columns []Column) jen.Code {
 		jen.Id("SelectBrother").Params(jen.Id("id").Id("int64")).Params(jen.Index().Op("*").Add(useEntity(camel))),
 		jen.Id("SelectBrotherAndSelf").Params(jen.Id("id").Id("int64")).Params(jen.Index().Op("*").Add(useEntity(camel))),
 		jen.Id("SelectAncestorChain").Params(jen.Id("id").Id("int64")).Params(jen.Index().Op("*").Add(useEntity(camel))),
-		jen.Id("SelectAncestor").Params(jen.Id("id").Id("int64"), jen.Id("level").Id("int")).Params(jen.Op("*").Add(useEntity(camel))),
+		jen.Id("SelectAncestor").Params(
+			jen.Id("id").Id("int64"), jen.Id("level").Id("int"),
+		).Params(jen.Op("*").Add(useEntity(camel))),
 		jen.Id("SelectParent").Params(jen.Id("id").Id("int64")).Params(jen.Op("*").Add(useEntity(camel))),
-		jen.Id("SelectByTreeNoAndLevel").Params(jen.List(jen.Id("treeNo"), jen.Id("level")).Id("int")).Params(jen.Index().Op("*").Add(useEntity(camel))),
+		jen.Id("SelectByTreeNoAndLevel").Params(
+			jen.List(
+				jen.Id("treeNo"), jen.Id("level"),
+			).Id("int"),
+		).Params(jen.Index().Op("*").Add(useEntity(camel))),
 		jen.Id("SelectByLevel").Params(jen.Id("level").Id("int")).Params(jen.Index().Op("*").Add(useEntity(camel))),
 		jen.Id("SelectRoot").Params(jen.Id("id").Id("int64")).Params(jen.Op("*").Add(useEntity(camel))),
-		jen.Id("SelectLeafOfNodeWithPage").Params(jen.Id("id").Id("int64"), jen.List(jen.Id("page"), jen.Id("size")).Id("uint")).Params(jen.Index().Op("*").Add(useEntity(camel)), jen.Id("int64")),
+		jen.Id("SelectLeafOfNodeWithPage").Params(
+			jen.Id("id").Id("int64"), jen.List(jen.Id("page"), jen.Id("size")).Id("uint"),
+		).Params(jen.Index().Op("*").Add(useEntity(camel)), jen.Id("int64")),
 		jen.Id("SelectAllLeafOfNode").Params(jen.Id("id").Id("int64")).Params(jen.Index().Op("*").Add(useEntity(camel))),
 		jen.Id("SelectAllRoot").Params().Params(jen.Index().Op("*").Add(useEntity(camel))),
-		jen.Id("Insert").Params(jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel).Op("*").Add(useEntity(camel))).Params(jen.Id("int64")),
-		jen.Id("InsertUnderNode").Params(jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel).Op("*").Add(useEntity(camel)), jen.Id("pid").Id("int64")).Params(jen.Id("int64")),
-		jen.Id("InsertBetweenNode").Params(jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel).Op("*").Add(useEntity(camel)), jen.List(jen.Id("pid"), jen.Id("sid")).Id("int64")).Params(jen.Id("int64")),
-		jen.Id("BatchInsert").Params(jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel+"s").Index().Op("*").Add(useEntity(camel))).Params(jen.Index().Id("int64")),
-		jen.Id("BatchInsertUnderNode").Params(jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel+"s").Index().Op("*").Add(useEntity(camel)), jen.Id("pid").Id("int64")).Params(jen.Index().Id("int64")),
-		jen.Id("BatchInsertBetweenNode").Params(jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel+"s").Index().Op("*").Add(useEntity(camel)), jen.List(jen.Id("pid"), jen.Id("sid")).Id("int64")).Params(jen.Index().Id("int64")),
-		jen.Id("InsertNonNil").Params(jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel).Op("*").Add(useEntity(camel))).Params(jen.Id("int64")),
-		jen.Id("InsertNonNilUnderNode").Params(jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel).Op("*").Add(useEntity(camel)), jen.Id("pid").Id("int64")).Params(jen.Id("int64")),
-		jen.Id("InsertNonNilBetweenNode").Params(jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel).Op("*").Add(useEntity(camel)), jen.List(jen.Id("pid"), jen.Id("sid")).Id("int64")).Params(jen.Id("int64")),
-		jen.Id("InsertWithFunc").Params(jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel).Op("*").Add(useEntity(camel)), genDeclAnonymousFunc()).Params(jen.Id("int64")),
-		jen.Id("InsertWithFuncUnderNode").Params(jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel).Op("*").Add(useEntity(camel)), jen.Id("pid").Id("int64"), genDeclAnonymousFunc()).Params(jen.Id("int64")),
-		jen.Id("InsertWithFuncBetweenNode").Params(jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel).Op("*").Add(useEntity(camel)), jen.List(jen.Id("pid"), jen.Id("sid")).Id("int64"), genDeclAnonymousFunc()).Params(jen.Id("int64")),
-		jen.Id("BatchInsertWithFunc").Params(jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel+"s").Index().Op("*").Add(useEntity(camel)), jen.List(jen.Id("pid"), jen.Id("sid")).Id("int64"), genDeclAnonymousFunc()).Params(jen.Index().Id("int64")),
-		inferColumn(jen.Id("DeleteByID").Params(jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id("id").Id("int64")).Params(jen.Id("bool")), "id", columns),
-		inferColumn(jen.Id("DeleteByIDs").Params(jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id("ids").Op("...").Id("int64")).Params(jen.Id("bool")), "id", columns),
-		inferColumn(jen.Id("BatchDeleteByID").Params(jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id("ids").Index().Id("int64")).Params(jen.Id("bool")), "id", columns),
-		inferColumn(jen.Id("UpdateByID").Params(jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel).Op("*").Add(useEntity(camel))).Params(jen.Id("bool")), "id", columns),
-		inferColumn(jen.Id("UpdateNonNilByID").Params(jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel).Op("*").Add(useEntity(camel))).Params(jen.Id("bool")), "id", columns),
-		inferColumn(jen.Id("UpdateWithFuncByID").Params(jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel).Op("*").Add(useEntity(camel)), genDeclAnonymousFunc()).Params(jen.Id("bool")), "id", columns),
-		inferColumn(jen.Id("BatchUpdateWithFuncByID").Params(jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel+"s").Index().Op("*").Add(useEntity(camel)), genDeclAnonymousFunc()).Params(jen.Id("bool")), "id", columns),
+		jen.Id("Insert").Params(
+			jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel).Op("*").Add(useEntity(camel)),
+		).Params(jen.Id("int64")),
+		jen.Id("InsertUnderNode").Params(
+			jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel).Op("*").Add(useEntity(camel)),
+			jen.Id("pid").Id("int64"),
+		).Params(jen.Id("int64")),
+		jen.Id("InsertBetweenNode").Params(
+			jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel).Op("*").Add(useEntity(camel)),
+			jen.List(jen.Id("pid"), jen.Id("sid")).Id("int64"),
+		).Params(jen.Id("int64")),
+		jen.Id("BatchInsert").Params(
+			jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel+"s").Index().Op("*").Add(useEntity(camel)),
+		).Params(jen.Index().Id("int64")),
+		jen.Id("BatchInsertUnderNode").Params(
+			jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel+"s").Index().Op("*").Add(useEntity(camel)),
+			jen.Id("pid").Id("int64"),
+		).Params(jen.Index().Id("int64")),
+		jen.Id("BatchInsertBetweenNode").Params(
+			jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel+"s").Index().Op("*").Add(useEntity(camel)),
+			jen.List(jen.Id("pid"), jen.Id("sid")).Id("int64"),
+		).Params(jen.Index().Id("int64")),
+		jen.Id("InsertNonNil").Params(
+			jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel).Op("*").Add(useEntity(camel)),
+		).Params(jen.Id("int64")),
+		jen.Id("InsertNonNilUnderNode").Params(
+			jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel).Op("*").Add(useEntity(camel)),
+			jen.Id("pid").Id("int64"),
+		).Params(jen.Id("int64")),
+		jen.Id("InsertNonNilBetweenNode").Params(
+			jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel).Op("*").Add(useEntity(camel)),
+			jen.List(jen.Id("pid"), jen.Id("sid")).Id("int64"),
+		).Params(jen.Id("int64")),
+		jen.Id("InsertWithFunc").Params(
+			jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel).Op("*").Add(useEntity(camel)), genDeclAnonymousFunc(),
+		).Params(jen.Id("int64")),
+		jen.Id("InsertWithFuncUnderNode").Params(
+			jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel).Op("*").Add(useEntity(camel)),
+			jen.Id("pid").Id("int64"), genDeclAnonymousFunc(),
+		).Params(jen.Id("int64")),
+		jen.Id("InsertWithFuncBetweenNode").Params(
+			jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel).Op("*").Add(useEntity(camel)),
+			jen.List(jen.Id("pid"), jen.Id("sid")).Id("int64"), genDeclAnonymousFunc(),
+		).Params(jen.Id("int64")),
+		jen.Id("BatchInsertWithFunc").Params(
+			jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel+"s").Index().Op("*").Add(useEntity(camel)),
+			jen.List(jen.Id("pid"), jen.Id("sid")).Id("int64"), genDeclAnonymousFunc(),
+		).Params(jen.Index().Id("int64")),
+		inferColumn(
+			jen.Id("DeleteByID").Params(
+				jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id("id").Id("int64"),
+			).Params(jen.Id("bool")), "id", columns,
+		),
+		inferColumn(
+			jen.Id("DeleteByIDs").Params(
+				jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id("ids").Op("...").Id("int64"),
+			).Params(jen.Id("bool")), "id", columns,
+		),
+		inferColumn(
+			jen.Id("BatchDeleteByID").Params(
+				jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id("ids").Index().Id("int64"),
+			).Params(jen.Id("bool")), "id", columns,
+		),
+		inferColumn(
+			jen.Id("UpdateByID").Params(
+				jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel).Op("*").Add(useEntity(camel)),
+			).Params(jen.Id("bool")), "id", columns,
+		),
+		inferColumn(
+			jen.Id("UpdateNonNilByID").Params(
+				jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel).Op("*").Add(useEntity(camel)),
+			).Params(jen.Id("bool")), "id", columns,
+		),
+		inferColumn(
+			jen.Id("UpdateWithFuncByID").Params(
+				jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel).Op("*").Add(useEntity(camel)),
+				genDeclAnonymousFunc(),
+			).Params(jen.Id("bool")), "id", columns,
+		),
+		inferColumn(
+			jen.Id("BatchUpdateWithFuncByID").Params(
+				jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel+"s").Index().Op("*").Add(useEntity(camel)),
+				genDeclAnonymousFunc(),
+			).Params(jen.Id("bool")), "id", columns,
+		),
 	)
 }
 
@@ -211,7 +299,11 @@ func genFuncMapperAll(table string, columns []Column) jen.Code {
 }
 
 func genFuncMapperNumeric() jen.Code {
-	return jen.Line().Comment("mapperNumeric 映射数值型").Line().Func().Id("mapperNumeric").Types(jen.Id("T").Union(jen.Int(), jen.Int64())).Params().Params(
+	return jen.Line().Comment("mapperNumeric 映射数值型").Line().Func().Id("mapperNumeric").Types(
+		jen.Id("T").Union(
+			jen.Int(), jen.Int64(),
+		),
+	).Params().Params(
 		jen.Op("*").Id("T"),
 		jen.Index().Id("any"),
 	).Block(
@@ -236,13 +328,20 @@ func genFuncTreeInfoSelectSql(table string, columns []Column) jen.Code {
 	var sql string
 	if hasColumn(d_key, columns) {
 		if hasColumn(ns_key, columns) {
-			sql = fmt.Sprintf("SELECT %s, %s, %s, %s FROM %s WHERE %s = ? AND %s = ? AND %s;", l_key, r_key, ll_key, tn_key, table, p_key, ns_key, ud_cond_key)
+			sql = fmt.Sprintf(
+				"SELECT %s, %s, %s, %s FROM %s WHERE %s = ? AND %s = ? AND %s;", l_key, r_key, ll_key, tn_key, table, p_key,
+				ns_key, ud_cond_key,
+			)
 		} else {
-			sql = fmt.Sprintf("SELECT %s, %s, %s, %s FROM %s WHERE %s = ? AND %s;", l_key, r_key, ll_key, tn_key, table, p_key, ud_cond_key)
+			sql = fmt.Sprintf(
+				"SELECT %s, %s, %s, %s FROM %s WHERE %s = ? AND %s;", l_key, r_key, ll_key, tn_key, table, p_key, ud_cond_key,
+			)
 		}
 	} else {
 		if hasColumn(ns_key, columns) {
-			sql = fmt.Sprintf("SELECT %s, %s, %s, %s FROM %s WHERE %s = ? AND %s = ?;", l_key, r_key, ll_key, tn_key, table, p_key, ns_key)
+			sql = fmt.Sprintf(
+				"SELECT %s, %s, %s, %s FROM %s WHERE %s = ? AND %s = ?;", l_key, r_key, ll_key, tn_key, table, p_key, ns_key,
+			)
 		} else {
 			sql = fmt.Sprintf("SELECT %s, %s, %s, %s FROM %s WHERE %s = ?;", l_key, r_key, ll_key, tn_key, table, p_key)
 		}
@@ -492,13 +591,23 @@ func genFuncInternalUpdateNodeInBothWhenInsert(table string, columns []Column) j
 
 	var sql0, sql1, sql2 string
 	if hasColumn(d_key, columns) {
-		sql0 = fmt.Sprintf("UPDATE %s SET %s = %s + 2 WHERE %s > ? AND %s = ? AND %s;", table, l_key, l_key, l_key, tn_key, ud_cond_key)
-		sql1 = fmt.Sprintf("UPDATE %s SET %s = %s + 2 WHERE %s > ? AND %s = ? AND %s;", table, r_key, r_key, r_key, tn_key, ud_cond_key)
-		sql2 = fmt.Sprintf("UPDATE %s SET %s = %s + 1, %s = %s + 1, %s = %s + 1 WHERE %s >= ? AND %s <= ? AND %s = ? AND %s;", table, l_key, l_key, r_key, r_key, ll_key, ll_key, ll_key, r_key, tn_key, ud_cond_key)
+		sql0 = fmt.Sprintf(
+			"UPDATE %s SET %s = %s + 2 WHERE %s > ? AND %s = ? AND %s;", table, l_key, l_key, l_key, tn_key, ud_cond_key,
+		)
+		sql1 = fmt.Sprintf(
+			"UPDATE %s SET %s = %s + 2 WHERE %s > ? AND %s = ? AND %s;", table, r_key, r_key, r_key, tn_key, ud_cond_key,
+		)
+		sql2 = fmt.Sprintf(
+			"UPDATE %s SET %s = %s + 1, %s = %s + 1, %s = %s + 1 WHERE %s >= ? AND %s <= ? AND %s = ? AND %s;", table, l_key,
+			l_key, r_key, r_key, ll_key, ll_key, ll_key, r_key, tn_key, ud_cond_key,
+		)
 	} else {
 		sql0 = fmt.Sprintf("UPDATE %s SET %s = %s + 2 WHERE %s > ? AND %s = ?;", table, l_key, l_key, l_key, tn_key)
 		sql1 = fmt.Sprintf("UPDATE %s SET %s = %s + 2 WHERE %s > ? AND %s = ?;", table, r_key, r_key, r_key, tn_key)
-		sql2 = fmt.Sprintf("UPDATE %s SET %s = %s + 1, %s = %s + 1, %s = %s + 1 WHERE %s >= ? AND %s <= ? AND %s = ?;", table, l_key, l_key, r_key, r_key, ll_key, ll_key, ll_key, r_key, tn_key)
+		sql2 = fmt.Sprintf(
+			"UPDATE %s SET %s = %s + 1, %s = %s + 1, %s = %s + 1 WHERE %s >= ? AND %s <= ? AND %s = ?;", table, l_key, l_key,
+			r_key, r_key, ll_key, ll_key, ll_key, r_key, tn_key,
+		)
 	}
 
 	return jen.Line().Comment("internalUpdateNodeInBothWhenInsert 在两个节点间插入时更新").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("internalUpdateNodeInBothWhenInsert").Params(
@@ -587,8 +696,12 @@ func genFuncInternalUpdateNodeInBothWhenInsert(table string, columns []Column) j
 func genFuncInternalUpdateNodeInOnlyPrecursorWhenInsert(table string, columns []Column) jen.Code {
 	var sql0, sql1 string
 	if hasColumn(d_key, columns) {
-		sql0 = fmt.Sprintf("UPDATE %s SET %s = %s + 2 WHERE %s > ? AND %s = ? AND %s;", table, l_key, l_key, l_key, tn_key, ud_cond_key)
-		sql1 = fmt.Sprintf("UPDATE %s SET %s = %s + 2 WHERE %s >= ? AND %s = ? AND %s;", table, r_key, r_key, r_key, tn_key, ud_cond_key)
+		sql0 = fmt.Sprintf(
+			"UPDATE %s SET %s = %s + 2 WHERE %s > ? AND %s = ? AND %s;", table, l_key, l_key, l_key, tn_key, ud_cond_key,
+		)
+		sql1 = fmt.Sprintf(
+			"UPDATE %s SET %s = %s + 2 WHERE %s >= ? AND %s = ? AND %s;", table, r_key, r_key, r_key, tn_key, ud_cond_key,
+		)
 	} else {
 		sql0 = fmt.Sprintf("UPDATE %s SET %s = %s + 2 WHERE %s > ? AND %s = ?;", table, l_key, l_key, l_key, tn_key)
 		sql1 = fmt.Sprintf("UPDATE %s SET %s = %s + 2 WHERE %s >= ? AND %s = ?;", table, r_key, r_key, r_key, tn_key)
@@ -738,7 +851,10 @@ func genFuncInternalDirectDelete(table string, columns []Column) jen.Code {
 
 	var sql0 string
 	if hasColumn(d_key, columns) {
-		sql0 = fmt.Sprintf("UPDATE %s SET %s = 1 WHERE %s >= ? AND %s <= ? AND %s = ? AND %s;", table, d_key, l_key, r_key, tn_key, ud_cond_key)
+		sql0 = fmt.Sprintf(
+			"UPDATE %s SET %s = 1 WHERE %s >= ? AND %s <= ? AND %s = ? AND %s;", table, d_key, l_key, r_key, tn_key,
+			ud_cond_key,
+		)
 	} else {
 		sql0 = fmt.Sprintf("DELETE FROM %s WHERE %s >= ? AND %s <= ? AND %s = ?;", table, l_key, r_key, tn_key)
 	}
@@ -800,8 +916,12 @@ func genFuncInternalDirectDelete(table string, columns []Column) jen.Code {
 func genFuncInternalUpdateNodeWhenDelete(table string, columns []Column) jen.Code {
 	var sql0, sql1 string
 	if hasColumn(d_key, columns) {
-		sql0 = fmt.Sprintf("UPDATE %s SET %s = %s - ? WHERE %s > ? AND %s = ? AND %s;", table, l_key, l_key, l_key, tn_key, ud_cond_key)
-		sql1 = fmt.Sprintf("UPDATE %s SET %s = %s - ? WHERE %s > ? AND %s = ? AND %s;", table, r_key, r_key, r_key, tn_key, ud_cond_key)
+		sql0 = fmt.Sprintf(
+			"UPDATE %s SET %s = %s - ? WHERE %s > ? AND %s = ? AND %s;", table, l_key, l_key, l_key, tn_key, ud_cond_key,
+		)
+		sql1 = fmt.Sprintf(
+			"UPDATE %s SET %s = %s - ? WHERE %s > ? AND %s = ? AND %s;", table, r_key, r_key, r_key, tn_key, ud_cond_key,
+		)
 	} else {
 		sql0 = fmt.Sprintf("UPDATE %s SET %s = %s - ? WHERE %s > ? AND %s = ?;", table, l_key, l_key, l_key, tn_key)
 		sql1 = fmt.Sprintf("UPDATE %s SET %s = %s - ? WHERE %s > ? AND %s = ?;", table, r_key, r_key, r_key, tn_key)
@@ -1112,9 +1232,14 @@ func genFuncSelectAllPosterity(table string, columns []Column) jen.Code {
 	// lowerCamel := strcase.ToLowerCamel(table)
 	var sql0 string
 	if hasColumn(d_key, columns) {
-		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s > ? AND %s < ? AND %s = ? AND %s;", allFields(columns), table, l_key, r_key, tn_key, ud_cond_key)
+		sql0 = fmt.Sprintf(
+			"SELECT %s FROM %s WHERE %s > ? AND %s < ? AND %s = ? AND %s;", allFields(columns), table, l_key, r_key, tn_key,
+			ud_cond_key,
+		)
 	} else {
-		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s > ? AND %s < ? AND %s = ?;", allFields(columns), table, l_key, r_key, tn_key)
+		sql0 = fmt.Sprintf(
+			"SELECT %s FROM %s WHERE %s > ? AND %s < ? AND %s = ?;", allFields(columns), table, l_key, r_key, tn_key,
+		)
 	}
 	return jen.Line().Comment("SelectAllPosterity 查询所有子代").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectAllPosterity").Params(jen.Id("id").Id("int64")).Params(jen.Index().Op("*").Add(useEntity(camel))).Block(
 		jen.Id("recorder").Op(":=").Add(useLogger("AccessLogger")).Call(jen.Id("ag").Dot("ctx")),
@@ -1189,9 +1314,15 @@ func genFuncSelectDirectPosterity(table string, columns []Column) jen.Code {
 
 	var sql0 string
 	if hasColumn(d_key, columns) {
-		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s = ? AND %s > ? AND %s < ? AND %s = ? AND %s;", allFields(columns), table, ll_key, l_key, r_key, tn_key, ud_cond_key)
+		sql0 = fmt.Sprintf(
+			"SELECT %s FROM %s WHERE %s = ? AND %s > ? AND %s < ? AND %s = ? AND %s;", allFields(columns), table, ll_key,
+			l_key, r_key, tn_key, ud_cond_key,
+		)
 	} else {
-		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s = ? AND %s > ? AND %s < ? AND %s = ?;", allFields(columns), table, ll_key, l_key, r_key, tn_key)
+		sql0 = fmt.Sprintf(
+			"SELECT %s FROM %s WHERE %s = ? AND %s > ? AND %s < ? AND %s = ?;", allFields(columns), table, ll_key, l_key,
+			r_key, tn_key,
+		)
 	}
 
 	return jen.Line().Comment("SelectDirectPosterity 查询直系子代").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectDirectPosterity").Params(jen.Id("id").Id("int64")).Params(jen.Index().Op("*").Add(useEntity(camel))).Block(
@@ -1267,9 +1398,14 @@ func genFuncSelectBrother(table string, columns []Column) jen.Code {
 
 	var sql0 string
 	if hasColumn(d_key, columns) {
-		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s = ? AND %s = ? AND %s != ? AND %s;", allFields(columns), table, ll_key, tn_key, p_key, ud_cond_key)
+		sql0 = fmt.Sprintf(
+			"SELECT %s FROM %s WHERE %s = ? AND %s = ? AND %s != ? AND %s;", allFields(columns), table, ll_key, tn_key, p_key,
+			ud_cond_key,
+		)
 	} else {
-		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s = ? AND %s = ? AND %s != ?;", allFields(columns), table, ll_key, tn_key, p_key)
+		sql0 = fmt.Sprintf(
+			"SELECT %s FROM %s WHERE %s = ? AND %s = ? AND %s != ?;", allFields(columns), table, ll_key, tn_key, p_key,
+		)
 	}
 
 	return jen.Line().Comment("SelectBrother 查询兄弟(不含自身)").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectBrother").Params(jen.Id("id").Id("int64")).Params(jen.Index().Op("*").Add(useEntity(camel))).Block(
@@ -1344,7 +1480,9 @@ func genFuncSelectBrotherAndSelf(table string, columns []Column) jen.Code {
 
 	var sql0 string
 	if hasColumn(d_key, columns) {
-		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s = ? AND %s = ? AND %s;", allFields(columns), table, ll_key, tn_key, ud_cond_key)
+		sql0 = fmt.Sprintf(
+			"SELECT %s FROM %s WHERE %s = ? AND %s = ? AND %s;", allFields(columns), table, ll_key, tn_key, ud_cond_key,
+		)
 	} else {
 		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s = ? AND %s = ?;", allFields(columns), table, ll_key, tn_key)
 	}
@@ -1420,9 +1558,14 @@ func genFuncSelectAncestorChain(table string, columns []Column) jen.Code {
 
 	var sql0 string
 	if hasColumn(d_key, columns) {
-		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s < ? AND %s > ? AND %s = ? AND %s;", allFields(columns), table, l_key, r_key, tn_key, ud_cond_key)
+		sql0 = fmt.Sprintf(
+			"SELECT %s FROM %s WHERE %s < ? AND %s > ? AND %s = ? AND %s;", allFields(columns), table, l_key, r_key, tn_key,
+			ud_cond_key,
+		)
 	} else {
-		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s < ? AND %s > ? AND %s = ?;", allFields(columns), table, l_key, r_key, tn_key)
+		sql0 = fmt.Sprintf(
+			"SELECT %s FROM %s WHERE %s < ? AND %s > ? AND %s = ?;", allFields(columns), table, l_key, r_key, tn_key,
+		)
 	}
 
 	return jen.Line().Comment("SelectAncestorChain 查询祖链").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectAncestorChain").Params(jen.Id("id").Id("int64")).Params(jen.Index().Op("*").Add(useEntity(camel))).Block(
@@ -1497,9 +1640,15 @@ func genFuncSelectAncestor(table string, columns []Column) jen.Code {
 
 	var sql0 string
 	if hasColumn(d_key, columns) {
-		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s < ? AND %s > ? AND %s = ? AND %s = ? AND %s;", allFields(columns), table, l_key, r_key, ll_key, tn_key, ud_cond_key)
+		sql0 = fmt.Sprintf(
+			"SELECT %s FROM %s WHERE %s < ? AND %s > ? AND %s = ? AND %s = ? AND %s;", allFields(columns), table, l_key,
+			r_key, ll_key, tn_key, ud_cond_key,
+		)
 	} else {
-		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s < ? AND %s > ? AND %s = ? AND %s = ?;", allFields(columns), table, l_key, r_key, ll_key, tn_key)
+		sql0 = fmt.Sprintf(
+			"SELECT %s FROM %s WHERE %s < ? AND %s > ? AND %s = ? AND %s = ?;", allFields(columns), table, l_key, r_key,
+			ll_key, tn_key,
+		)
 	}
 
 	return jen.Line().Comment("SelectAncestor 查询祖节点").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectAncestor").Params(
@@ -1571,9 +1720,15 @@ func genFuncSelectParent(table string, columns []Column) jen.Code {
 
 	var sql0 string
 	if hasColumn(d_key, columns) {
-		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s < ? AND %s > ? AND %s = ? AND %s = ? AND %s;", allFields(columns), table, l_key, r_key, ll_key, tn_key, ud_cond_key)
+		sql0 = fmt.Sprintf(
+			"SELECT %s FROM %s WHERE %s < ? AND %s > ? AND %s = ? AND %s = ? AND %s;", allFields(columns), table, l_key,
+			r_key, ll_key, tn_key, ud_cond_key,
+		)
 	} else {
-		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s < ? AND %s > ? AND %s = ? AND %s = ?;", allFields(columns), table, l_key, r_key, ll_key, tn_key)
+		sql0 = fmt.Sprintf(
+			"SELECT %s FROM %s WHERE %s < ? AND %s > ? AND %s = ? AND %s = ?;", allFields(columns), table, l_key, r_key,
+			ll_key, tn_key,
+		)
 	}
 
 	return jen.Line().Comment("SelectParent 查询父节点").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectParent").Params(jen.Id("id").Id("int64")).Params(jen.Op("*").Add(useEntity(camel))).Block(
@@ -1641,7 +1796,9 @@ func genFuncSelectByTreeNoAndLevel(table string, columns []Column) jen.Code {
 
 	var sql0 string
 	if hasColumn(d_key, columns) {
-		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s = ? AND %s = ? AND %s;", allFields(columns), table, ll_key, tn_key, ud_cond_key)
+		sql0 = fmt.Sprintf(
+			"SELECT %s FROM %s WHERE %s = ? AND %s = ? AND %s;", allFields(columns), table, ll_key, tn_key, ud_cond_key,
+		)
 	} else {
 		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s = ? AND %s = ?;", allFields(columns), table, ll_key, tn_key)
 	}
@@ -1743,7 +1900,9 @@ func genFuncSelectRoot(table string, columns []Column) jen.Code {
 	// lowerCamel := strcase.ToLowerCamel(table)
 	var sql0 string
 	if hasColumn(d_key, columns) {
-		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s = 1 AND %s = ? AND %s;", allFields(columns), table, ll_key, tn_key, ud_cond_key)
+		sql0 = fmt.Sprintf(
+			"SELECT %s FROM %s WHERE %s = 1 AND %s = ? AND %s;", allFields(columns), table, ll_key, tn_key, ud_cond_key,
+		)
 	} else {
 		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s = 1 AND %s = ?;", allFields(columns), table, ll_key, tn_key)
 	}
@@ -1810,11 +1969,23 @@ func genFuncSelectLeafOfNodeWithPage(table string, columns []Column) jen.Code {
 
 	var sql0, sql1 string
 	if hasColumn(d_key, columns) {
-		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s >= ? AND %s <= ? AND %s + 1 = %s AND %s = ? AND %s ORDER BY %s LIMIT ? OFFSET ?;", allFields(columns), table, l_key, r_key, l_key, r_key, tn_key, ud_cond_key, l_key)
-		sql1 = fmt.Sprintf("SELECT %s FROM %s WHERE %s >= ? AND %s <= ? AND %s + 1 = %s AND %s = ? AND %s;", allFields(columns), table, l_key, r_key, l_key, r_key, tn_key, ud_cond_key)
+		sql0 = fmt.Sprintf(
+			"SELECT %s FROM %s WHERE %s >= ? AND %s <= ? AND %s + 1 = %s AND %s = ? AND %s ORDER BY %s LIMIT ? OFFSET ?;",
+			allFields(columns), table, l_key, r_key, l_key, r_key, tn_key, ud_cond_key, l_key,
+		)
+		sql1 = fmt.Sprintf(
+			"SELECT %s FROM %s WHERE %s >= ? AND %s <= ? AND %s + 1 = %s AND %s = ? AND %s;", allFields(columns), table,
+			l_key, r_key, l_key, r_key, tn_key, ud_cond_key,
+		)
 	} else {
-		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s >= ? AND %s <= ? AND %s + 1 = %s AND %s = ? ORDER BY %s LIMIT ? OFFSET ?;", allFields(columns), table, l_key, r_key, l_key, r_key, tn_key, l_key)
-		sql1 = fmt.Sprintf("SELECT %s FROM %s WHERE %s >= ? AND %s <= ? AND %s + 1 = %s AND %s = ?;", allFields(columns), table, l_key, r_key, l_key, r_key, tn_key)
+		sql0 = fmt.Sprintf(
+			"SELECT %s FROM %s WHERE %s >= ? AND %s <= ? AND %s + 1 = %s AND %s = ? ORDER BY %s LIMIT ? OFFSET ?;",
+			allFields(columns), table, l_key, r_key, l_key, r_key, tn_key, l_key,
+		)
+		sql1 = fmt.Sprintf(
+			"SELECT %s FROM %s WHERE %s >= ? AND %s <= ? AND %s + 1 = %s AND %s = ?;", allFields(columns), table, l_key,
+			r_key, l_key, r_key, tn_key,
+		)
 	}
 
 	return jen.Line().Comment("SelectLeafOfNodeWithPage 查询对应节点叶子节点(分页)").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectLeafOfNodeWithPage").Params(
@@ -1922,9 +2093,15 @@ func genFuncSelectAllLeafOfNode(table string, columns []Column) jen.Code {
 
 	var sql0 string
 	if hasColumn(d_key, columns) {
-		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s >= ? AND %s <= ? AND %s + 1 = %s AND %s = ? AND %s ORDER BY %s;", allFields(columns), table, l_key, r_key, l_key, r_key, tn_key, ud_cond_key, l_key)
+		sql0 = fmt.Sprintf(
+			"SELECT %s FROM %s WHERE %s >= ? AND %s <= ? AND %s + 1 = %s AND %s = ? AND %s ORDER BY %s;", allFields(columns),
+			table, l_key, r_key, l_key, r_key, tn_key, ud_cond_key, l_key,
+		)
 	} else {
-		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s >= ? AND %s <= ? AND %s + 1 = %s AND %s = ? ORDER BY %s;", allFields(columns), table, l_key, r_key, l_key, r_key, tn_key, l_key)
+		sql0 = fmt.Sprintf(
+			"SELECT %s FROM %s WHERE %s >= ? AND %s <= ? AND %s + 1 = %s AND %s = ? ORDER BY %s;", allFields(columns), table,
+			l_key, r_key, l_key, r_key, tn_key, l_key,
+		)
 	}
 
 	return jen.Line().Comment("SelectAllLeafOfNode 查询对应节点的所有叶子节点").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectAllLeafOfNode").Params(jen.Id("id").Id("int64")).Params(jen.Index().Op("*").Add(useEntity(camel))).Block(
@@ -1999,7 +2176,9 @@ func genFuncSelectAllRoot(table string, columns []Column) jen.Code {
 
 	var sql0 string
 	if hasColumn(d_key, columns) {
-		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s = 1 AND %s ORDER BY %s;", allFields(columns), table, ll_key, ud_cond_key, tn_key)
+		sql0 = fmt.Sprintf(
+			"SELECT %s FROM %s WHERE %s = 1 AND %s ORDER BY %s;", allFields(columns), table, ll_key, ud_cond_key, tn_key,
+		)
 	} else {
 		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s = 1 ORDER BY %s;", allFields(columns), table, ll_key, tn_key)
 	}
@@ -2727,7 +2906,9 @@ func getColumns(table string) []Column {
 func fillNs(columns []Column) jen.Code {
 	if hasColumn(ns_key, columns) {
 		// jen.Var().Id("values").Index().Id("any")
-		return jen.Id("values").Op("=").Id("append").Call(jen.Id("values"), jen.Add(useUtil("GetNsID")).Call(jen.Id("ag").Dot("ctx")))
+		return jen.Id("values").Op("=").Id("append").Call(
+			jen.Id("values"), jen.Add(useUtil("GetNsID")).Call(jen.Id("ag").Dot("ctx")),
+		)
 	}
 	return jen.Null()
 }
@@ -2758,7 +2939,7 @@ func TestRepository0(t *testing.T) {
 	strcase.ConfigureAcronym("ID", "id")
 	strcase.ConfigureAcronym("id", "ID")
 
-	table := "role"
+	table := "account"
 
 	f := generated.RenderFile(table)
 
@@ -2772,4 +2953,42 @@ func TestRepository0(t *testing.T) {
 		panic(err)
 	}
 	err = f.Render(wr)
+}
+
+func TestRepository1(t *testing.T) {
+
+	defer func() {
+		a := recover()
+		of := reflect.TypeOf(a)
+		//if v, ok := a.(*entity.Account); ok {
+		//	fmt.Printf("%v\n", *v.Title)
+		//	fmt.Printf("%v\n", v.Title)
+		//}
+		switch t := a.(type) {
+		case *entity.Account:
+			fmt.Printf("p> %v\n", t)
+		case entity.Account:
+			fmt.Printf("s> %v\n", t)
+		default:
+			fmt.Println("no match")
+		}
+		fmt.Printf("%v\n", of.String())
+		fmt.Printf("%v\n", of.Kind())
+	}()
+
+	ea := entity.NewAccount()
+	oa := dto.NewAccount()
+
+	ea.Title = util.ToPtr[string]("hello")
+
+	panic("ea")
+
+	fmt.Printf("%v\n", ea)
+	fmt.Printf("%v\n", oa)
+
+	ea.ID = util.ToPtr[int64](123)
+	_ = oa.From(ea)
+
+	fmt.Printf("%v\n", ea)
+	fmt.Printf("%v\n", oa)
 }

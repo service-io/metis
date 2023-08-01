@@ -2,7 +2,7 @@
 // @author tabuyos
 // @since 2023/8/1
 // @description generated
-package generated
+package helper
 
 import (
 	"github.com/dave/jennifer/jen"
@@ -148,7 +148,9 @@ func RenderStarField(sn, field string) jen.Code {
 func AddNsValue(columns []Column) jen.Code {
 	if HasColumn(NS_KEY, columns) {
 		// jen.Var().Id("values").Index().Id("any")
-		return jen.Id("values").Op("=").Id("append").Call(jen.Id("values"), jen.Add(UseUtil("GetNsID")).Call(jen.Id("ag").Dot("ctx")))
+		return jen.Id("values").Op("=").Id("append").Call(
+			jen.Id("values"), jen.Add(UseUtil("GetNsID")).Call(jen.Id("ag").Dot("ctx")),
+		)
 	}
 	return jen.Null()
 }
@@ -164,14 +166,18 @@ func AddNsSingleValue(columns []Column) jen.Code {
 func AddNsValueWithNew(columns []Column) jen.Code {
 	if HasColumn(NS_KEY, columns) {
 		// jen.Var().Id("values").Index().Id("any")
-		return jen.Id("values").Op(":=").Id("append").Call(jen.Id("values"), jen.Add(UseUtil("GetNsID")).Call(jen.Id("ag").Dot("ctx")))
+		return jen.Id("values").Op(":=").Id("append").Call(
+			jen.Id("values"), jen.Add(UseUtil("GetNsID")).Call(jen.Id("ag").Dot("ctx")),
+		)
 	}
 	return jen.Null()
 }
 
 func AddNsValueWithName(columns []Column, name string) jen.Code {
 	if HasColumn(NS_KEY, columns) {
-		return jen.Id(name).Op("=").Id("append").Call(jen.Id(name), jen.Add(UseUtil("GetNsID")).Call(jen.Id("ag").Dot("ctx")))
+		return jen.Id(name).Op("=").Id("append").Call(
+			jen.Id(name), jen.Add(UseUtil("GetNsID")).Call(jen.Id("ag").Dot("ctx")),
+		)
 	}
 	return jen.Null()
 }

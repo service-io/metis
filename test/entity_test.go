@@ -116,7 +116,7 @@ func TestEntity(t *testing.T) {
 	strcase.ConfigureAcronym("ID", "id")
 	strcase.ConfigureAcronym("id", "ID")
 
-	table := "survey"
+	table := "account"
 	columns := getColumns(table)
 
 	f := genEntityFile(table, columns)

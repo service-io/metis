@@ -8,70 +8,126 @@ import (
 	"fmt"
 	"github.com/dave/jennifer/jen"
 	"github.com/iancoleman/strcase"
-	"metis/generated"
+	"metis/generated/helper"
 )
 
 type GenBaseRepo struct {
 }
 
-func (rec *GenBaseRepo) genInterfaceAutoGen(table string, columns []generated.Column) jen.Code {
+func (rec *GenBaseRepo) genInterfaceAutoGen(table string, columns []helper.Column) jen.Code {
 	camel := strcase.ToCamel(table)
 	lowerCamel := strcase.ToLowerCamel(table)
 	return jen.Comment("iAutoGen 该接口自动生成, 请勿修改").Line().Type().Id("iAutoGen").Interface(
-		generated.InferColumn(jen.Id("SelectByID").Params(jen.Id("id").Id("int64")).Params(jen.Op("*").Add(generated.UseEntity(camel))), "id", columns),
-		generated.InferColumn(jen.Id("SelectByIDs").Params(jen.Id("ids").Op("...").Id("int64")).Params(jen.Index().Op("*").Add(generated.UseEntity(camel))), "id", columns),
-		generated.InferColumn(jen.Id("BatchSelectByID").Params(jen.Id("ids").Index().Id("int64")).Params(jen.Index().Op("*").Add(generated.UseEntity(camel))), "id", columns),
+		helper.InferColumn(
+			jen.Id("SelectByID").Params(jen.Id("id").Id("int64")).Params(jen.Op("*").Add(helper.UseEntity(camel))), "id",
+			columns,
+		),
+		helper.InferColumn(
+			jen.Id("SelectByIDs").Params(jen.Id("ids").Op("...").Id("int64")).Params(jen.Index().Op("*").Add(helper.UseEntity(camel))),
+			"id", columns,
+		),
+		helper.InferColumn(
+			jen.Id("BatchSelectByID").Params(jen.Id("ids").Index().Id("int64")).Params(jen.Index().Op("*").Add(helper.UseEntity(camel))),
+			"id", columns,
+		),
 		jen.Line(),
-		generated.InferColumn(jen.Id("SelectByName").Params(jen.Id("name").Id("string")).Params(jen.Index().Op("*").Add(generated.UseEntity(camel))), "name", columns),
+		helper.InferColumn(
+			jen.Id("SelectByName").Params(jen.Id("name").Id("string")).Params(jen.Index().Op("*").Add(helper.UseEntity(camel))),
+			"name", columns,
+		),
 		jen.Line(),
-		jen.Id("Insert").Params(jen.Id("tx").Op("*").Add(generated.UseSql("Tx")), jen.Id(lowerCamel).Op("*").Add(generated.UseEntity(camel))).Params(jen.Id("int64")),
-		jen.Id("InsertNonNil").Params(jen.Id("tx").Op("*").Add(generated.UseSql("Tx")), jen.Id(lowerCamel).Op("*").Add(generated.UseEntity(camel))).Params(jen.Id("int64")),
-		jen.Id("InsertWithFunc").Params(jen.Id("tx").Op("*").Add(generated.UseSql("Tx")), jen.Id(lowerCamel).Op("*").Add(generated.UseEntity(camel)), generated.GenDeclAnonymousFunc()).Params(jen.Id("int64")),
-		jen.Id("BatchInsert").Params(jen.Id("tx").Op("*").Add(generated.UseSql("Tx")), jen.Id(lowerCamel+"s").Index().Op("*").Add(generated.UseEntity(camel))).Params(jen.Index().Id("int64")),
-		jen.Id("BatchInsertWithFunc").Params(jen.Id("tx").Op("*").Add(generated.UseSql("Tx")), jen.Id(lowerCamel+"s").Index().Op("*").Add(generated.UseEntity(camel)), jen.List(jen.Id("pid"), jen.Id("sid")).Id("int64"), generated.GenDeclAnonymousFunc()).Params(jen.Index().Id("int64")),
+		jen.Id("Insert").Params(
+			jen.Id("tx").Op("*").Add(helper.UseSql("Tx")), jen.Id(lowerCamel).Op("*").Add(helper.UseEntity(camel)),
+		).Params(jen.Id("int64")),
+		jen.Id("InsertNonNil").Params(
+			jen.Id("tx").Op("*").Add(helper.UseSql("Tx")), jen.Id(lowerCamel).Op("*").Add(helper.UseEntity(camel)),
+		).Params(jen.Id("int64")),
+		jen.Id("InsertWithFunc").Params(
+			jen.Id("tx").Op("*").Add(helper.UseSql("Tx")), jen.Id(lowerCamel).Op("*").Add(helper.UseEntity(camel)),
+			helper.GenDeclAnonymousFunc(),
+		).Params(jen.Id("int64")),
+		jen.Id("BatchInsert").Params(
+			jen.Id("tx").Op("*").Add(helper.UseSql("Tx")),
+			jen.Id(lowerCamel+"s").Index().Op("*").Add(helper.UseEntity(camel)),
+		).Params(jen.Index().Id("int64")),
+		jen.Id("BatchInsertWithFunc").Params(
+			jen.Id("tx").Op("*").Add(helper.UseSql("Tx")),
+			jen.Id(lowerCamel+"s").Index().Op("*").Add(helper.UseEntity(camel)),
+			jen.List(jen.Id("pid"), jen.Id("sid")).Id("int64"), helper.GenDeclAnonymousFunc(),
+		).Params(jen.Index().Id("int64")),
 		jen.Line(),
-		generated.InferColumn(jen.Id("DeleteByID").Params(jen.Id("tx").Op("*").Add(generated.UseSql("Tx")), jen.Id("id").Id("int64")).Params(jen.Id("bool")), "id", columns),
-		generated.InferColumn(jen.Id("DeleteByIDs").Params(jen.Id("tx").Op("*").Add(generated.UseSql("Tx")), jen.Id("ids").Op("...").Id("int64")).Params(jen.Id("bool")), "id", columns),
-		generated.InferColumn(jen.Id("BatchDeleteByID").Params(jen.Id("tx").Op("*").Add(generated.UseSql("Tx")), jen.Id("ids").Index().Id("int64")).Params(jen.Id("bool")), "id", columns),
+		helper.InferColumn(
+			jen.Id("DeleteByID").Params(
+				jen.Id("tx").Op("*").Add(helper.UseSql("Tx")), jen.Id("id").Id("int64"),
+			).Params(jen.Id("bool")), "id", columns,
+		),
+		helper.InferColumn(
+			jen.Id("DeleteByIDs").Params(
+				jen.Id("tx").Op("*").Add(helper.UseSql("Tx")), jen.Id("ids").Op("...").Id("int64"),
+			).Params(jen.Id("bool")), "id", columns,
+		),
+		helper.InferColumn(
+			jen.Id("BatchDeleteByID").Params(
+				jen.Id("tx").Op("*").Add(helper.UseSql("Tx")), jen.Id("ids").Index().Id("int64"),
+			).Params(jen.Id("bool")), "id", columns,
+		),
 		jen.Line(),
-		generated.InferColumn(jen.Id("UpdateByID").Params(jen.Id("tx").Op("*").Add(generated.UseSql("Tx")), jen.Id(lowerCamel).Op("*").Add(generated.UseEntity(camel))).Params(jen.Id("bool")), "id", columns),
-		generated.InferColumn(jen.Id("UpdateNonNilByID").Params(jen.Id("tx").Op("*").Add(generated.UseSql("Tx")), jen.Id(lowerCamel).Op("*").Add(generated.UseEntity(camel))).Params(jen.Id("bool")), "id", columns),
-		generated.InferColumn(jen.Id("UpdateWithFuncByID").Params(jen.Id("tx").Op("*").Add(generated.UseSql("Tx")), jen.Id(lowerCamel).Op("*").Add(generated.UseEntity(camel)), generated.GenDeclAnonymousFunc()).Params(jen.Id("bool")), "id", columns),
-		generated.InferColumn(jen.Id("BatchUpdateWithFuncByID").Params(jen.Id("tx").Op("*").Add(generated.UseSql("Tx")), jen.Id(lowerCamel+"s").Index().Op("*").Add(generated.UseEntity(camel)), generated.GenDeclAnonymousFunc()).Params(jen.Id("bool")), "id", columns),
+		helper.InferColumn(
+			jen.Id("UpdateByID").Params(
+				jen.Id("tx").Op("*").Add(helper.UseSql("Tx")), jen.Id(lowerCamel).Op("*").Add(helper.UseEntity(camel)),
+			).Params(jen.Id("bool")), "id", columns,
+		),
+		helper.InferColumn(
+			jen.Id("UpdateNonNilByID").Params(
+				jen.Id("tx").Op("*").Add(helper.UseSql("Tx")), jen.Id(lowerCamel).Op("*").Add(helper.UseEntity(camel)),
+			).Params(jen.Id("bool")), "id", columns,
+		),
+		helper.InferColumn(
+			jen.Id("UpdateWithFuncByID").Params(
+				jen.Id("tx").Op("*").Add(helper.UseSql("Tx")), jen.Id(lowerCamel).Op("*").Add(helper.UseEntity(camel)),
+				helper.GenDeclAnonymousFunc(),
+			).Params(jen.Id("bool")), "id", columns,
+		),
+		helper.InferColumn(
+			jen.Id("BatchUpdateWithFuncByID").Params(
+				jen.Id("tx").Op("*").Add(helper.UseSql("Tx")),
+				jen.Id(lowerCamel+"s").Index().Op("*").Add(helper.UseEntity(camel)), helper.GenDeclAnonymousFunc(),
+			).Params(jen.Id("bool")), "id", columns,
+		),
 	)
 }
 
 func (rec *GenBaseRepo) genStructAutoGen() jen.Code {
-	return jen.Line().Comment("autoGen 该结构体自动生成, 请勿修改").Line().Type().Id("autoGen").Struct(jen.Id("ctx").Op("*").Add(generated.UseGin("Context")))
+	return jen.Line().Comment("autoGen 该结构体自动生成, 请勿修改").Line().Type().Id("autoGen").Struct(jen.Id("ctx").Op("*").Add(helper.UseGin("Context")))
 }
 
 func (rec *GenBaseRepo) genFuncGetDbCtx() jen.Code {
 	return jen.Line().Comment("getDbCtx 获取 DB 的初始上下文").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("getDbCtx").
-		Params().Params(generated.UseContext("Context")).
+		Params().Params(helper.UseContext("Context")).
 		Block(
-			jen.Return().Add(generated.UseContext("WithValue")).Call(
-				jen.Add(generated.UseContext("Background")).Call(),
-				jen.Add(generated.UseConstant("TraceIdKey")),
-				jen.Id("ag").Dot("ctx").Dot("GetString").Call(generated.UseConstant("TraceIdKey")),
+			jen.Return().Add(helper.UseContext("WithValue")).Call(
+				jen.Add(helper.UseContext("Background")).Call(),
+				jen.Add(helper.UseConstant("TraceIdKey")),
+				jen.Id("ag").Dot("ctx").Dot("GetString").Call(helper.UseConstant("TraceIdKey")),
 			),
 		)
 }
 
-func (rec *GenBaseRepo) genFuncMapperAll(table string, columns []generated.Column) jen.Code {
+func (rec *GenBaseRepo) genFuncMapperAll(table string, columns []helper.Column) jen.Code {
 	var codes = make([]jen.Code, len(columns))
 	for i, column := range columns {
-		codes[i] = generated.RenderAndField("r", column.ColumnName)
+		codes[i] = helper.RenderAndField("r", column.ColumnName)
 	}
 
 	camel := strcase.ToCamel(table)
 
 	return jen.Line().Comment("mapperAll 映射实体的所有字体").Line().Func().Id("mapperAll").Params().
 		Params(
-			jen.Op("*").Add(generated.UseEntity(camel)),
+			jen.Op("*").Add(helper.UseEntity(camel)),
 			jen.Index().Id("any"),
 		).
 		Block(
-			jen.Var().Id("r").Op("=").Op("&").Add(generated.UseEntity(camel)).Values(),
+			jen.Var().Id("r").Op("=").Op("&").Add(helper.UseEntity(camel)).Values(),
 			jen.Var().Id("cs").Op("=").Index().Id("any").Values(
 				codes...,
 			),
@@ -83,7 +139,11 @@ func (rec *GenBaseRepo) genFuncMapperAll(table string, columns []generated.Colum
 }
 
 func (rec *GenBaseRepo) genFuncMapperNumeric() jen.Code {
-	return jen.Line().Comment("mapperNumeric 映射数值型").Line().Func().Id("mapperNumeric").Types(jen.Id("T").Union(jen.Int(), jen.Int64())).Params().Params(
+	return jen.Line().Comment("mapperNumeric 映射数值型").Line().Func().Id("mapperNumeric").Types(
+		jen.Id("T").Union(
+			jen.Int(), jen.Int64(),
+		),
+	).Params().Params(
 		jen.Op("*").Id("T"),
 		jen.Index().Id("any"),
 	).Block(
@@ -96,7 +156,7 @@ func (rec *GenBaseRepo) genFuncMapperNumeric() jen.Code {
 	)
 }
 
-func (rec *GenBaseRepo) genFuncCalcInsertField(table string, columns []generated.Column) jen.Code {
+func (rec *GenBaseRepo) genFuncCalcInsertField(table string, columns []helper.Column) jen.Code {
 	camel := strcase.ToCamel(table)
 	lowerCamel := strcase.ToLowerCamel(table)
 	var codes []jen.Code
@@ -120,7 +180,7 @@ func (rec *GenBaseRepo) genFuncCalcInsertField(table string, columns []generated
 			),
 			jen.Id("values").Op("=").Id("append").Call(
 				jen.Id("values"),
-				generated.RenderStarField(lowerCamel, columnName),
+				helper.RenderStarField(lowerCamel, columnName),
 			),
 		)
 		codes = append(codes, code)
@@ -128,11 +188,11 @@ func (rec *GenBaseRepo) genFuncCalcInsertField(table string, columns []generated
 
 	codes = append(
 		codes, jen.Return().List(
-			jen.Add(generated.UseStrings("Join")).Call(
+			jen.Add(helper.UseStrings("Join")).Call(
 				jen.Id("fields"),
 				jen.Lit(", "),
 			),
-			jen.Add(generated.UseStrings("Join")).Call(
+			jen.Add(helper.UseStrings("Join")).Call(
 				jen.Id("places"),
 				jen.Lit(", "),
 			),
@@ -141,8 +201,8 @@ func (rec *GenBaseRepo) genFuncCalcInsertField(table string, columns []generated
 	)
 
 	return jen.Line().Comment("calcInsertField 计算待插入的字段").Line().Func().Id("calcInsertField").Params(
-		jen.Id(lowerCamel).Op("*").Add(generated.UseEntity(camel)),
-		generated.GenDeclAnonymousFunc(),
+		jen.Id(lowerCamel).Op("*").Add(helper.UseEntity(camel)),
+		helper.GenDeclAnonymousFunc(),
 	).Params(
 		jen.Id("string"),
 		jen.Id("string"),
@@ -150,7 +210,7 @@ func (rec *GenBaseRepo) genFuncCalcInsertField(table string, columns []generated
 	).Block(codes...)
 }
 
-func (rec *GenBaseRepo) genFuncCalcUpdateField(table string, columns []generated.Column) jen.Code {
+func (rec *GenBaseRepo) genFuncCalcUpdateField(table string, columns []helper.Column) jen.Code {
 	camel := strcase.ToCamel(table)
 	lowerCamel := strcase.ToLowerCamel(table)
 	var codes []jen.Code
@@ -169,7 +229,7 @@ func (rec *GenBaseRepo) genFuncCalcUpdateField(table string, columns []generated
 			),
 			jen.Id("values").Op("=").Id("append").Call(
 				jen.Id("values"),
-				generated.RenderStarField(lowerCamel, columnName),
+				helper.RenderStarField(lowerCamel, columnName),
 			),
 		)
 		codes = append(codes, code)
@@ -177,7 +237,7 @@ func (rec *GenBaseRepo) genFuncCalcUpdateField(table string, columns []generated
 
 	codes = append(
 		codes, jen.Return().List(
-			jen.Add(generated.UseStrings("Join")).Call(
+			jen.Add(helper.UseStrings("Join")).Call(
 				jen.Id("fields"),
 				jen.Lit(", "),
 			),
@@ -186,56 +246,56 @@ func (rec *GenBaseRepo) genFuncCalcUpdateField(table string, columns []generated
 	)
 
 	return jen.Line().Comment("calcUpdateField 计算待更新的字段").Line().Func().Id("calcUpdateField").Params(
-		jen.Id(lowerCamel).Op("*").Add(generated.UseEntity(camel)),
-		generated.GenDeclAnonymousFunc(),
+		jen.Id(lowerCamel).Op("*").Add(helper.UseEntity(camel)),
+		helper.GenDeclAnonymousFunc(),
 	).Params(
 		jen.Id("string"),
 		jen.Index().Id("any"),
 	).Block(codes...)
 }
 
-func (rec *GenBaseRepo) genFuncInternalSelectByIDs(table string, columns []generated.Column) jen.Code {
-	if !generated.HasColumn(generated.P_KEY, columns) {
+func (rec *GenBaseRepo) genFuncInternalSelectByIDs(table string, columns []helper.Column) jen.Code {
+	if !helper.HasColumn(helper.P_KEY, columns) {
 		return jen.Null()
 	}
 
 	camel := strcase.ToCamel(table)
 	// lowerCamel := strcase.ToLowerCamel(table)
 
-	fields := generated.AllFields(columns)
+	fields := helper.AllFields(columns)
 
-	sql := fmt.Sprintf("SELECT %s FROM %s WHERE %s ", fields, table, generated.P_KEY)
+	sql := fmt.Sprintf("SELECT %s FROM %s WHERE %s ", fields, table, helper.P_KEY)
 
 	return jen.Line().Comment("internalSelectByIDs 根据 ID 列表插入节点").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("internalSelectByIDs").Params(
-		jen.Id("tx").Op("*").Add(generated.UseSql("Tx")),
-		jen.Id("db").Op("*").Add(generated.UseSql("DB")),
+		jen.Id("tx").Op("*").Add(helper.UseSql("Tx")),
+		jen.Id("db").Op("*").Add(helper.UseSql("DB")),
 		jen.Id("ids").Index().Id("int64"),
-	).Params(jen.Index().Op("*").Add(generated.UseEntity(camel))).Block(
-		jen.Id("recorder").Op(":=").Add(generated.UseLogger("AccessLogger")).Call(jen.Id("ag").Dot("ctx")),
+	).Params(jen.Index().Op("*").Add(helper.UseEntity(camel))).Block(
+		jen.Id("recorder").Op(":=").Add(helper.UseLogger("AccessLogger")).Call(jen.Id("ag").Dot("ctx")),
 		jen.Id("recorder").Dot("Sugar").Call().Dot("Infof").Call(
 			jen.Lit("查询 ID 列表: %+v 的数据"),
 			jen.Id("ids"),
 		),
-		jen.Var().Id("sqlBuilder").Add(generated.UseStrings("Builder")),
+		jen.Var().Id("sqlBuilder").Add(helper.UseStrings("Builder")),
 		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit(sql)),
 		jen.If(jen.Id("len").Call(jen.Id("ids")).Op("==").Lit(1)).Block(
 			jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("= ?")),
 		).Else().Block(
 			jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("IN (")),
-			jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Add(generated.UseUtil("GenPlaceholder")).Call(jen.Id("ids"))),
+			jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Add(helper.UseUtil("GenPlaceholder")).Call(jen.Id("ids"))),
 			jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit(")")),
 		),
-		generated.AddNsField(columns, "sqlBuilder"),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit(generated.UD_COND_KEY+";")),
-		jen.Id("errorHandler").Op(":=").Add(generated.UseUtil("ErrToLogAndPanic")).Call(jen.Id("recorder")),
-		jen.Var().Id("stmt").Op("*").Add(generated.UseSql("Stmt")),
+		helper.AddNsField(columns, "sqlBuilder"),
+		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit(helper.UD_COND_KEY+";")),
+		jen.Id("errorHandler").Op(":=").Add(helper.UseUtil("ErrToLogAndPanic")).Call(jen.Id("recorder")),
+		jen.Var().Id("stmt").Op("*").Add(helper.UseSql("Stmt")),
 		jen.Var().Id("err").Id("error"),
 		jen.If(jen.Id("tx").Op("!=").Id("nil")).Block(
 			jen.List(
 				jen.Id("stmt"),
 				jen.Id("err"),
 			).Op("=").Id("tx").Dot("Prepare").Call(jen.Id("sqlBuilder").Dot("String").Call()),
-			jen.Defer().Add(generated.UseUtil("DeferClose")).Call(
+			jen.Defer().Add(helper.UseUtil("DeferClose")).Call(
 				jen.Id("stmt"),
 				jen.Id("errorHandler"),
 			),
@@ -245,14 +305,14 @@ func (rec *GenBaseRepo) genFuncInternalSelectByIDs(table string, columns []gener
 				jen.Id("stmt"),
 				jen.Id("err"),
 			).Op("=").Id("db").Dot("Prepare").Call(jen.Id("sqlBuilder").Dot("String").Call()),
-			jen.Defer().Add(generated.UseUtil("DeferClose")).Call(
+			jen.Defer().Add(helper.UseUtil("DeferClose")).Call(
 				jen.Id("stmt"),
 				jen.Id("errorHandler"),
 			),
 			jen.Id("errorHandler").Call(jen.Id("err")),
 		),
-		jen.Id("bindValues").Op(":=").Add(generated.UseUtil("ToAnyItems")).Call(jen.Id("ids")),
-		generated.AddNsValueWithName(columns, "bindValues"),
+		jen.Id("bindValues").Op(":=").Add(helper.UseUtil("ToAnyItems")).Call(jen.Id("ids")),
+		helper.AddNsValueWithName(columns, "bindValues"),
 		jen.List(
 			jen.Id("rows"),
 			jen.Id("err"),
@@ -261,11 +321,11 @@ func (rec *GenBaseRepo) genFuncInternalSelectByIDs(table string, columns []gener
 			jen.Id("bindValues").Op("..."),
 		),
 		jen.Id("errorHandler").Call(jen.Id("err")),
-		jen.Defer().Add(generated.UseUtil("DeferClose")).Call(
+		jen.Defer().Add(helper.UseUtil("DeferClose")).Call(
 			jen.Id("rows"),
 			jen.Id("errorHandler"),
 		),
-		jen.Id("ds").Op(":=").Add(generated.UseUtil("Rows")).Call(
+		jen.Id("ds").Op(":=").Add(helper.UseUtil("Rows")).Call(
 			jen.Id("rows"),
 			jen.Id("mapperAll"),
 		),
@@ -273,16 +333,16 @@ func (rec *GenBaseRepo) genFuncInternalSelectByIDs(table string, columns []gener
 	)
 }
 
-func (rec *GenBaseRepo) genFuncInternalDirectInsert(table string, columns []generated.Column) jen.Code {
+func (rec *GenBaseRepo) genFuncInternalDirectInsert(table string, columns []helper.Column) jen.Code {
 	camel := strcase.ToCamel(table)
 	lowerCamel := strcase.ToLowerCamel(table)
 
 	return jen.Line().Comment("internalDirectInsert 直接插入").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("internalDirectInsert").Params(
-		jen.Id("tx").Op("*").Add(generated.UseSql("Tx")),
-		jen.Id(lowerCamel).Op("*").Add(generated.UseEntity(camel)),
-		generated.GenDeclAnonymousFunc(),
+		jen.Id("tx").Op("*").Add(helper.UseSql("Tx")),
+		jen.Id(lowerCamel).Op("*").Add(helper.UseEntity(camel)),
+		helper.GenDeclAnonymousFunc(),
 	).Params(jen.Id("int64")).Block(
-		jen.Id("recorder").Op(":=").Add(generated.UseLogger("AccessLogger")).Call(jen.Id("ag").Dot("ctx")),
+		jen.Id("recorder").Op(":=").Add(helper.UseLogger("AccessLogger")).Call(jen.Id("ag").Dot("ctx")),
 		jen.Id("recorder").Dot("Sugar").Call().Dot("Infof").Call(
 			jen.Lit("插入数据: %+v"),
 			jen.Op("*").Id(lowerCamel),
@@ -295,18 +355,18 @@ func (rec *GenBaseRepo) genFuncInternalDirectInsert(table string, columns []gene
 			jen.Id(lowerCamel),
 			jen.Id("fn"),
 		),
-		jen.Var().Id("sqlBuilder").Add(generated.UseStrings("Builder")),
+		jen.Var().Id("sqlBuilder").Add(helper.UseStrings("Builder")),
 		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("INSERT INTO "+table+"(")),
 		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Id("fields")),
 		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit(") VALUES (")),
 		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Id("places")),
 		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit(");")),
-		jen.Id("errorHandler").Op(":=").Add(generated.UseUtil("ErrToLogAndPanic")).Call(jen.Id("recorder")),
+		jen.Id("errorHandler").Op(":=").Add(helper.UseUtil("ErrToLogAndPanic")).Call(jen.Id("recorder")),
 		jen.List(
 			jen.Id("stmt"),
 			jen.Id("err"),
 		).Op(":=").Id("tx").Dot("Prepare").Call(jen.Id("sqlBuilder").Dot("String").Call()),
-		jen.Defer().Add(generated.UseUtil("DeferClose")).Call(
+		jen.Defer().Add(helper.UseUtil("DeferClose")).Call(
 			jen.Id("stmt"),
 			jen.Id("errorHandler"),
 		),
@@ -334,35 +394,41 @@ func (rec *GenBaseRepo) genFuncInternalDirectInsert(table string, columns []gene
 	)
 }
 
-func (rec *GenBaseRepo) genFuncInternalDirectDelete(table string, columns []generated.Column) jen.Code {
+func (rec *GenBaseRepo) genFuncInternalDirectDelete(table string, columns []helper.Column) jen.Code {
 
 	var sql0 string
-	if generated.HasColumn(generated.D_KEY, columns) {
-		if generated.HasColumn(generated.NS_KEY, columns) {
-			sql0 = fmt.Sprintf("UPDATE %s SET %s = 1 WHERE %s = ? AND %s AND %s;", table, generated.D_KEY, generated.P_KEY, generated.NS_COND_KEY, generated.UD_COND_KEY)
+	if helper.HasColumn(helper.D_KEY, columns) {
+		if helper.HasColumn(helper.NS_KEY, columns) {
+			sql0 = fmt.Sprintf(
+				"UPDATE %s SET %s = 1 WHERE %s = ? AND %s AND %s;", table, helper.D_KEY, helper.P_KEY,
+				helper.NS_COND_KEY, helper.UD_COND_KEY,
+			)
 		} else {
-			sql0 = fmt.Sprintf("UPDATE %s SET %s = 1 WHERE %s = ? AND %s;", table, generated.D_KEY, generated.P_KEY, generated.UD_COND_KEY)
+			sql0 = fmt.Sprintf(
+				"UPDATE %s SET %s = 1 WHERE %s = ? AND %s;", table, helper.D_KEY, helper.P_KEY,
+				helper.UD_COND_KEY,
+			)
 		}
 	} else {
-		if generated.HasColumn(generated.NS_KEY, columns) {
-			sql0 = fmt.Sprintf("DELETE FROM %s WHERE %s = ? AND %s;", table, generated.P_KEY, generated.NS_COND_KEY)
+		if helper.HasColumn(helper.NS_KEY, columns) {
+			sql0 = fmt.Sprintf("DELETE FROM %s WHERE %s = ? AND %s;", table, helper.P_KEY, helper.NS_COND_KEY)
 		} else {
-			sql0 = fmt.Sprintf("DELETE FROM %s WHERE %s = ?;", table, generated.P_KEY)
+			sql0 = fmt.Sprintf("DELETE FROM %s WHERE %s = ?;", table, helper.P_KEY)
 		}
 	}
 
 	return jen.Line().Comment("internalDirectDelete 直接删除(逻辑 or 物理)").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("internalDirectDelete").Params(
-		jen.Id("tx").Op("*").Add(generated.UseSql("Tx")),
+		jen.Id("tx").Op("*").Add(helper.UseSql("Tx")),
 		jen.Id("id").Id("int64"),
 	).Params(jen.Id("bool")).Block(
-		jen.Id("recorder").Op(":=").Add(generated.UseLogger("AccessLogger")).Call(jen.Id("ag").Dot("ctx")),
+		jen.Id("recorder").Op(":=").Add(helper.UseLogger("AccessLogger")).Call(jen.Id("ag").Dot("ctx")),
 
-		jen.Id("errorHandler").Op(":=").Add(generated.UseUtil("ErrToLogAndPanic")).Call(jen.Id("recorder")),
+		jen.Id("errorHandler").Op(":=").Add(helper.UseUtil("ErrToLogAndPanic")).Call(jen.Id("recorder")),
 		jen.List(
 			jen.Id("stmt"),
 			jen.Id("err"),
 		).Op(":=").Id("tx").Dot("Prepare").Call(jen.Lit(sql0)),
-		jen.Defer().Add(generated.UseUtil("DeferClose")).Call(
+		jen.Defer().Add(helper.UseUtil("DeferClose")).Call(
 			jen.Id("stmt"),
 			jen.Id("errorHandler"),
 		),
@@ -373,7 +439,7 @@ func (rec *GenBaseRepo) genFuncInternalDirectDelete(table string, columns []gene
 		).Op(":=").Id("stmt").Dot("ExecContext").Call(
 			jen.Id("ag").Dot("getDbCtx").Call(),
 			jen.Id("id"),
-			generated.AddNsSingleValue(columns),
+			helper.AddNsSingleValue(columns),
 		),
 		jen.Id("errorHandler").Call(jen.Id("err")),
 		jen.List(
@@ -386,8 +452,8 @@ func (rec *GenBaseRepo) genFuncInternalDirectDelete(table string, columns []gene
 	)
 }
 
-func (rec *GenBaseRepo) genFuncSelectByID(table string, columns []generated.Column) jen.Code {
-	if !generated.HasColumn(generated.P_KEY, columns) {
+func (rec *GenBaseRepo) genFuncSelectByID(table string, columns []helper.Column) jen.Code {
+	if !helper.HasColumn(helper.P_KEY, columns) {
 		return jen.Null()
 	}
 
@@ -395,42 +461,42 @@ func (rec *GenBaseRepo) genFuncSelectByID(table string, columns []generated.Colu
 	// lowerCamel := strcase.ToLowerCamel(table)
 
 	return jen.Line().Comment("SelectByID 根据 ID 查询").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectByID").Params(jen.Id("id").Id("int64")).
-		Params(jen.Op("*").Add(generated.UseEntity(camel))).Block(
+		Params(jen.Op("*").Add(helper.UseEntity(camel))).Block(
 		jen.Id("ds").Op(":=").Id("ag").Dot("BatchSelectByID").Call(jen.Index().Id("int64").Values(jen.Id("id"))),
 		jen.If(jen.Id("len").Call(jen.Id("ds")).Op("==").Lit(1)).Block(jen.Return().Id("ds").Index(jen.Lit(0))),
 		jen.Return().Id("nil"),
 	)
 }
 
-func (rec *GenBaseRepo) genFuncSelectByIDs(table string, columns []generated.Column) jen.Code {
-	if !generated.HasColumn(generated.P_KEY, columns) {
+func (rec *GenBaseRepo) genFuncSelectByIDs(table string, columns []helper.Column) jen.Code {
+	if !helper.HasColumn(helper.P_KEY, columns) {
 		return jen.Null()
 	}
 
 	camel := strcase.ToCamel(table)
 	// lowerCamel := strcase.ToLowerCamel(table)
 	return jen.Line().Comment("SelectByIDs 根据 ID 列表查询").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectByIDs").Params(jen.Id("ids").Op("...").Id("int64")).
-		Params(jen.Index().Op("*").Add(generated.UseEntity(camel))).Block(
+		Params(jen.Index().Op("*").Add(helper.UseEntity(camel))).Block(
 		jen.Id("ds").Op(":=").Id("ag").Dot("BatchSelectByID").Call(jen.Id("ids")),
 		jen.Return().Id("ds"),
 	)
 }
 
-func (rec *GenBaseRepo) genFuncBatchSelectByID(table string, columns []generated.Column) jen.Code {
-	if !generated.HasColumn(generated.P_KEY, columns) {
+func (rec *GenBaseRepo) genFuncBatchSelectByID(table string, columns []helper.Column) jen.Code {
+	if !helper.HasColumn(helper.P_KEY, columns) {
 		return jen.Null()
 	}
 
 	camel := strcase.ToCamel(table)
 	// lowerCamel := strcase.ToLowerCamel(table)
 	return jen.Line().Comment("BatchSelectByID 根据 ID 批量查询").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("BatchSelectByID").Params(jen.Id("ids").Index().Id("int64")).
-		Params(jen.Index().Op("*").Add(generated.UseEntity(camel))).Block(
-		jen.Id("recorder").Op(":=").Add(generated.UseLogger("AccessLogger")).Call(jen.Id("ag").Dot("ctx")),
+		Params(jen.Index().Op("*").Add(helper.UseEntity(camel))).Block(
+		jen.Id("recorder").Op(":=").Add(helper.UseLogger("AccessLogger")).Call(jen.Id("ag").Dot("ctx")),
 		jen.Id("recorder").Dot("Sugar").Call().Dot("Infof").Call(
 			jen.Lit("查询 ID 列表: %+v 的数据"),
 			jen.Id("ids"),
 		),
-		jen.Id("db").Op(":=").Add(generated.UseDatabase("FetchDB")).Call(),
+		jen.Id("db").Op(":=").Add(helper.UseDatabase("FetchDB")).Call(),
 		jen.Return().Id("ag").Dot("internalSelectByIDs").Call(
 			jen.Id("nil"),
 			jen.Id("db"),
@@ -439,36 +505,45 @@ func (rec *GenBaseRepo) genFuncBatchSelectByID(table string, columns []generated
 	)
 }
 
-func (rec *GenBaseRepo) genFuncSelectByName(table string, columns []generated.Column) jen.Code {
+func (rec *GenBaseRepo) genFuncSelectByName(table string, columns []helper.Column) jen.Code {
 	camel := strcase.ToCamel(table)
 	// lowerCamel := strcase.ToLowerCamel(table)
 	var sql0 string
-	if generated.HasColumn(generated.D_KEY, columns) {
-		if generated.HasColumn(generated.NS_KEY, columns) {
-			sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s like ? AND %s AND %s;", generated.AllFields(columns), table, generated.N_KEY, generated.NS_COND_KEY, generated.UD_COND_KEY)
+	if helper.HasColumn(helper.D_KEY, columns) {
+		if helper.HasColumn(helper.NS_KEY, columns) {
+			sql0 = fmt.Sprintf(
+				"SELECT %s FROM %s WHERE %s like ? AND %s AND %s;", helper.AllFields(columns), table,
+				helper.N_KEY, helper.NS_COND_KEY, helper.UD_COND_KEY,
+			)
 		} else {
-			sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s like ? AND %s;", generated.AllFields(columns), table, generated.N_KEY, generated.UD_COND_KEY)
+			sql0 = fmt.Sprintf(
+				"SELECT %s FROM %s WHERE %s like ? AND %s;", helper.AllFields(columns), table, helper.N_KEY,
+				helper.UD_COND_KEY,
+			)
 		}
 	} else {
-		if generated.HasColumn(generated.NS_KEY, columns) {
-			sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s like ? AND %s;", generated.AllFields(columns), table, generated.N_KEY, generated.NS_COND_KEY)
+		if helper.HasColumn(helper.NS_KEY, columns) {
+			sql0 = fmt.Sprintf(
+				"SELECT %s FROM %s WHERE %s like ? AND %s;", helper.AllFields(columns), table, helper.N_KEY,
+				helper.NS_COND_KEY,
+			)
 		} else {
-			sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s like ?;", generated.AllFields(columns), table, generated.N_KEY)
+			sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s like ?;", helper.AllFields(columns), table, helper.N_KEY)
 		}
 	}
-	return jen.Line().Comment("SelectByName 根据名称查询").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectByName").Params(jen.Id("name").Id("string")).Params(jen.Index().Op("*").Add(generated.UseEntity(camel))).Block(
-		jen.Id("recorder").Op(":=").Add(generated.UseLogger("AccessLogger")).Call(jen.Id("ag").Dot("ctx")),
+	return jen.Line().Comment("SelectByName 根据名称查询").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectByName").Params(jen.Id("name").Id("string")).Params(jen.Index().Op("*").Add(helper.UseEntity(camel))).Block(
+		jen.Id("recorder").Op(":=").Add(helper.UseLogger("AccessLogger")).Call(jen.Id("ag").Dot("ctx")),
 		jen.Id("recorder").Dot("Sugar").Call().Dot("Infof").Call(
 			jen.Lit("查询 NAME: %+v 的数据"),
 			jen.Id("name"),
 		),
-		jen.Id("db").Op(":=").Add(generated.UseDatabase("FetchDB")).Call(),
-		jen.Id("errorHandler").Op(":=").Add(generated.UseUtil("ErrToLogAndPanic")).Call(jen.Id("recorder")),
+		jen.Id("db").Op(":=").Add(helper.UseDatabase("FetchDB")).Call(),
+		jen.Id("errorHandler").Op(":=").Add(helper.UseUtil("ErrToLogAndPanic")).Call(jen.Id("recorder")),
 		jen.List(
 			jen.Id("stmt"),
 			jen.Id("err"),
 		).Op(":=").Id("db").Dot("Prepare").Call(jen.Lit(sql0)),
-		jen.Defer().Add(generated.UseUtil("DeferClose")).Call(
+		jen.Defer().Add(helper.UseUtil("DeferClose")).Call(
 			jen.Id("stmt"),
 			jen.Id("errorHandler"),
 		),
@@ -479,14 +554,14 @@ func (rec *GenBaseRepo) genFuncSelectByName(table string, columns []generated.Co
 		).Op(":=").Id("stmt").Dot("QueryContext").Call(
 			jen.Id("ag").Dot("getDbCtx").Call(),
 			jen.Id("name"),
-			generated.AddNsSingleValue(columns),
+			helper.AddNsSingleValue(columns),
 		),
 		jen.Id("errorHandler").Call(jen.Id("err")),
-		jen.Defer().Add(generated.UseUtil("DeferClose")).Call(
+		jen.Defer().Add(helper.UseUtil("DeferClose")).Call(
 			jen.Id("rows"),
 			jen.Id("errorHandler"),
 		),
-		jen.Id("ds").Op(":=").Add(generated.UseUtil("Rows")).Call(
+		jen.Id("ds").Op(":=").Add(helper.UseUtil("Rows")).Call(
 			jen.Id("rows"),
 			jen.Id("mapperAll"),
 		),
@@ -494,17 +569,17 @@ func (rec *GenBaseRepo) genFuncSelectByName(table string, columns []generated.Co
 	)
 }
 
-func (rec *GenBaseRepo) genFuncInsert(table string, columns []generated.Column) jen.Code {
+func (rec *GenBaseRepo) genFuncInsert(table string, columns []helper.Column) jen.Code {
 	camel := strcase.ToCamel(table)
 	lowerCamel := strcase.ToLowerCamel(table)
 
 	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("Insert").Params(
-		jen.Id("tx").Op("*").Add(generated.UseSql("Tx")),
-		jen.Id(lowerCamel).Op("*").Add(generated.UseEntity(camel)),
+		jen.Id("tx").Op("*").Add(helper.UseSql("Tx")),
+		jen.Id(lowerCamel).Op("*").Add(helper.UseEntity(camel)),
 	).Params(jen.Id("int64")).Block(
 		jen.Id("ids").Op(":=").Id("ag").Dot("BatchInsertWithFunc").Call(
 			jen.Id("tx"),
-			jen.Index().Op("*").Add(generated.UseEntity(camel)).Values(jen.Id(lowerCamel)),
+			jen.Index().Op("*").Add(helper.UseEntity(camel)).Values(jen.Id(lowerCamel)),
 			jen.Func().Params(jen.Id("f").Id("any")).Params(jen.Id("bool")).Block(jen.Return().Id("true")),
 		),
 		jen.If(jen.Id("len").Call(jen.Id("ids")).Op("==").Lit(1)).Block(jen.Return().Id("ids").Index(jen.Lit(0))),
@@ -512,13 +587,13 @@ func (rec *GenBaseRepo) genFuncInsert(table string, columns []generated.Column) 
 	)
 }
 
-func (rec *GenBaseRepo) genFuncBatchInsert(table string, columns []generated.Column) jen.Code {
+func (rec *GenBaseRepo) genFuncBatchInsert(table string, columns []helper.Column) jen.Code {
 	camel := strcase.ToCamel(table)
 	lowerCamel := strcase.ToLowerCamel(table)
 
 	return jen.Line().Comment("BatchInsert 批量插入").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("BatchInsert").Params(
-		jen.Id("tx").Op("*").Add(generated.UseSql("Tx")),
-		jen.Id(lowerCamel+"s").Index().Op("*").Add(generated.UseEntity(camel)),
+		jen.Id("tx").Op("*").Add(helper.UseSql("Tx")),
+		jen.Id(lowerCamel+"s").Index().Op("*").Add(helper.UseEntity(camel)),
 	).Params(jen.Index().Id("int64")).Block(
 		jen.Id("ids").Op(":=").Id("ag").Dot("BatchInsertWithFunc").Call(
 			jen.Id("tx"),
@@ -530,17 +605,17 @@ func (rec *GenBaseRepo) genFuncBatchInsert(table string, columns []generated.Col
 	)
 }
 
-func (rec *GenBaseRepo) genFuncInsertNonNil(table string, columns []generated.Column) jen.Code {
+func (rec *GenBaseRepo) genFuncInsertNonNil(table string, columns []helper.Column) jen.Code {
 	camel := strcase.ToCamel(table)
 	lowerCamel := strcase.ToLowerCamel(table)
 
 	return jen.Line().Comment("InsertNonNil 插入非空字段").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("InsertNonNil").Params(
-		jen.Id("tx").Op("*").Add(generated.UseSql("Tx")),
-		jen.Id(lowerCamel).Op("*").Add(generated.UseEntity(camel)),
+		jen.Id("tx").Op("*").Add(helper.UseSql("Tx")),
+		jen.Id(lowerCamel).Op("*").Add(helper.UseEntity(camel)),
 	).Params(jen.Id("int64")).Block(
 		jen.Id("ids").Op(":=").Id("ag").Dot("BatchInsertWithFunc").Call(
 			jen.Id("tx"),
-			jen.Index().Op("*").Add(generated.UseEntity(camel)).Values(jen.Id(lowerCamel)),
+			jen.Index().Op("*").Add(helper.UseEntity(camel)).Values(jen.Id(lowerCamel)),
 			jen.Func().Params(jen.Id("f").Id("any")).Params(jen.Id("bool")).Block(jen.Return().Id("f").Op("!=").Id("nil")),
 		),
 		jen.If(jen.Id("len").Call(jen.Id("ids")).Op("==").Lit(1)).Block(jen.Return().Id("ids").Index(jen.Lit(0))),
@@ -548,18 +623,18 @@ func (rec *GenBaseRepo) genFuncInsertNonNil(table string, columns []generated.Co
 	)
 }
 
-func (rec *GenBaseRepo) genFuncInsertWithFunc(table string, columns []generated.Column) jen.Code {
+func (rec *GenBaseRepo) genFuncInsertWithFunc(table string, columns []helper.Column) jen.Code {
 	camel := strcase.ToCamel(table)
 	lowerCamel := strcase.ToLowerCamel(table)
 
 	return jen.Line().Comment("InsertWithFunc 根据函数插入字段").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("InsertWithFunc").Params(
-		jen.Id("tx").Op("*").Add(generated.UseSql("Tx")),
-		jen.Id(lowerCamel).Op("*").Add(generated.UseEntity(camel)),
-		generated.GenDeclAnonymousFunc(),
+		jen.Id("tx").Op("*").Add(helper.UseSql("Tx")),
+		jen.Id(lowerCamel).Op("*").Add(helper.UseEntity(camel)),
+		helper.GenDeclAnonymousFunc(),
 	).Params(jen.Id("int64")).Block(
 		jen.Id("ids").Op(":=").Id("ag").Dot("BatchInsertWithFunc").Call(
 			jen.Id("tx"),
-			jen.Index().Op("*").Add(generated.UseEntity(camel)).Values(jen.Id(lowerCamel)),
+			jen.Index().Op("*").Add(helper.UseEntity(camel)).Values(jen.Id(lowerCamel)),
 			jen.Id("fn"),
 		),
 		jen.If(jen.Id("len").Call(jen.Id("ids")).Op("==").Lit(1)).Block(jen.Return().Id("ids").Index(jen.Lit(0))),
@@ -567,16 +642,16 @@ func (rec *GenBaseRepo) genFuncInsertWithFunc(table string, columns []generated.
 	)
 }
 
-func (rec *GenBaseRepo) genFuncBatchInsertWithFunc(table string, columns []generated.Column) jen.Code {
+func (rec *GenBaseRepo) genFuncBatchInsertWithFunc(table string, columns []helper.Column) jen.Code {
 	camel := strcase.ToCamel(table)
 	lowerCamel := strcase.ToLowerCamel(table)
 
 	return jen.Line().Comment("BatchInsertWithFunc 根据函数批量插入").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("BatchInsertWithFunc").Params(
-		jen.Id("tx").Op("*").Add(generated.UseSql("Tx")),
-		jen.Id(lowerCamel+"s").Index().Op("*").Add(generated.UseEntity(camel)),
-		generated.GenDeclAnonymousFunc(),
+		jen.Id("tx").Op("*").Add(helper.UseSql("Tx")),
+		jen.Id(lowerCamel+"s").Index().Op("*").Add(helper.UseEntity(camel)),
+		helper.GenDeclAnonymousFunc(),
 	).Params(jen.Index().Id("int64")).Block(
-		jen.Id("recorder").Op(":=").Add(generated.UseLogger("AccessLogger")).Call(jen.Id("ag").Dot("ctx")),
+		jen.Id("recorder").Op(":=").Add(helper.UseLogger("AccessLogger")).Call(jen.Id("ag").Dot("ctx")),
 		jen.Id("recorder").Dot("Info").Call(
 			jen.Lit("批量插入数据"),
 		),
@@ -600,13 +675,13 @@ func (rec *GenBaseRepo) genFuncBatchInsertWithFunc(table string, columns []gener
 	)
 }
 
-func (rec *GenBaseRepo) genFuncDeleteByID(table string, columns []generated.Column) jen.Code {
-	if !generated.HasColumn(generated.P_KEY, columns) {
+func (rec *GenBaseRepo) genFuncDeleteByID(table string, columns []helper.Column) jen.Code {
+	if !helper.HasColumn(helper.P_KEY, columns) {
 		return jen.Null()
 	}
 
 	return jen.Line().Comment("DeleteByID 根据 ID 删除").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("DeleteByID").Params(
-		jen.Id("tx").Op("*").Add(generated.UseSql("Tx")),
+		jen.Id("tx").Op("*").Add(helper.UseSql("Tx")),
 		jen.Id("id").Id("int64"),
 	).Params(jen.Id("bool")).Block(
 		jen.Return().Id("ag").Dot("BatchDeleteByID").Call(
@@ -616,13 +691,13 @@ func (rec *GenBaseRepo) genFuncDeleteByID(table string, columns []generated.Colu
 	)
 }
 
-func (rec *GenBaseRepo) genFuncDeleteByIDs(table string, columns []generated.Column) jen.Code {
-	if !generated.HasColumn(generated.P_KEY, columns) {
+func (rec *GenBaseRepo) genFuncDeleteByIDs(table string, columns []helper.Column) jen.Code {
+	if !helper.HasColumn(helper.P_KEY, columns) {
 		return jen.Null()
 	}
 
 	return jen.Line().Comment("DeleteByIDs 根据 ID 列表删除").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("DeleteByIDs").Params(
-		jen.Id("tx").Op("*").Add(generated.UseSql("Tx")),
+		jen.Id("tx").Op("*").Add(helper.UseSql("Tx")),
 		jen.Id("ids").Op("...").Id("int64"),
 	).Params(jen.Id("bool")).Block(
 		jen.Return().Id("ag").Dot("BatchDeleteByID").Call(
@@ -632,16 +707,16 @@ func (rec *GenBaseRepo) genFuncDeleteByIDs(table string, columns []generated.Col
 	)
 }
 
-func (rec *GenBaseRepo) genFuncBatchDeleteByID(table string, columns []generated.Column) jen.Code {
-	if !generated.HasColumn(generated.P_KEY, columns) {
+func (rec *GenBaseRepo) genFuncBatchDeleteByID(table string, columns []helper.Column) jen.Code {
+	if !helper.HasColumn(helper.P_KEY, columns) {
 		return jen.Null()
 	}
 
 	return jen.Line().Comment("BatchDeleteByID 根据 ID 批量删除").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("BatchDeleteByID").Params(
-		jen.Id("tx").Op("*").Add(generated.UseSql("Tx")),
+		jen.Id("tx").Op("*").Add(helper.UseSql("Tx")),
 		jen.Id("ids").Index().Id("int64"),
 	).Params(jen.Id("bool")).Block(
-		jen.Id("recorder").Op(":=").Add(generated.UseLogger("AccessLogger")).Call(jen.Id("ag").Dot("ctx")),
+		jen.Id("recorder").Op(":=").Add(helper.UseLogger("AccessLogger")).Call(jen.Id("ag").Dot("ctx")),
 		jen.Id("recorder").Dot("Sugar").Call().Dot("Infof").Call(
 			jen.Lit("删除 ID 列表: %+v 的数据"),
 			jen.Id("ids"),
@@ -662,66 +737,66 @@ func (rec *GenBaseRepo) genFuncBatchDeleteByID(table string, columns []generated
 	)
 }
 
-func (rec *GenBaseRepo) genFuncUpdateByID(table string, columns []generated.Column) jen.Code {
-	if !generated.HasColumn(generated.P_KEY, columns) {
+func (rec *GenBaseRepo) genFuncUpdateByID(table string, columns []helper.Column) jen.Code {
+	if !helper.HasColumn(helper.P_KEY, columns) {
 		return jen.Null()
 	}
 
 	camel := strcase.ToCamel(table)
 	lowerCamel := strcase.ToLowerCamel(table)
 	return jen.Line().Comment("UpdateByID 根据 ID 批量更新").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("UpdateByID").Params(
-		jen.Id("tx").Op("*").Add(generated.UseSql("Tx")),
-		jen.Id(lowerCamel).Op("*").Add(generated.UseEntity(camel)),
+		jen.Id("tx").Op("*").Add(helper.UseSql("Tx")),
+		jen.Id(lowerCamel).Op("*").Add(helper.UseEntity(camel)),
 	).Params(jen.Id("bool")).Block(
 		jen.Return().Id("ag").Dot("BatchUpdateWithFuncByID").Call(
 			jen.Id("tx"),
-			jen.Index().Op("*").Add(generated.UseEntity(camel)).Values(jen.Id(lowerCamel)),
+			jen.Index().Op("*").Add(helper.UseEntity(camel)).Values(jen.Id(lowerCamel)),
 			jen.Func().Params(jen.Id("f").Id("any")).Params(jen.Id("bool")).Block(jen.Return().Id("true")),
 		),
 	)
 }
 
-func (rec *GenBaseRepo) genFuncUpdateNonNilByID(table string, columns []generated.Column) jen.Code {
-	if !generated.HasColumn(generated.P_KEY, columns) {
+func (rec *GenBaseRepo) genFuncUpdateNonNilByID(table string, columns []helper.Column) jen.Code {
+	if !helper.HasColumn(helper.P_KEY, columns) {
 		return jen.Null()
 	}
 
 	camel := strcase.ToCamel(table)
 	lowerCamel := strcase.ToLowerCamel(table)
 	return jen.Line().Comment("UpdateNonNilByID 根据 ID 更新非空字段").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("UpdateNonNilByID").Params(
-		jen.Id("tx").Op("*").Add(generated.UseSql("Tx")),
-		jen.Id(lowerCamel).Op("*").Add(generated.UseEntity(camel)),
+		jen.Id("tx").Op("*").Add(helper.UseSql("Tx")),
+		jen.Id(lowerCamel).Op("*").Add(helper.UseEntity(camel)),
 	).Params(jen.Id("bool")).Block(
 		jen.Return().Id("ag").Dot("BatchUpdateWithFuncByID").Call(
 			jen.Id("tx"),
-			jen.Index().Op("*").Add(generated.UseEntity(camel)).Values(jen.Id(lowerCamel)),
+			jen.Index().Op("*").Add(helper.UseEntity(camel)).Values(jen.Id(lowerCamel)),
 			jen.Func().Params(jen.Id("f").Id("any")).Params(jen.Id("bool")).Block(jen.Return().Id("f").Op("!=").Id("nil")),
 		),
 	)
 }
 
-func (rec *GenBaseRepo) genFuncUpdateWithFuncByID(table string, columns []generated.Column) jen.Code {
-	if !generated.HasColumn(generated.P_KEY, columns) {
+func (rec *GenBaseRepo) genFuncUpdateWithFuncByID(table string, columns []helper.Column) jen.Code {
+	if !helper.HasColumn(helper.P_KEY, columns) {
 		return jen.Null()
 	}
 
 	camel := strcase.ToCamel(table)
 	lowerCamel := strcase.ToLowerCamel(table)
 	return jen.Line().Comment("UpdateWithFuncByID 根据 ID 更新满足函数的字段").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("UpdateWithFuncByID").Params(
-		jen.Id("tx").Op("*").Add(generated.UseSql("Tx")),
-		jen.Id(lowerCamel).Op("*").Add(generated.UseEntity(camel)),
-		generated.GenDeclAnonymousFunc(),
+		jen.Id("tx").Op("*").Add(helper.UseSql("Tx")),
+		jen.Id(lowerCamel).Op("*").Add(helper.UseEntity(camel)),
+		helper.GenDeclAnonymousFunc(),
 	).Params(jen.Id("bool")).Block(
 		jen.Return().Id("ag").Dot("BatchUpdateWithFuncByID").Call(
 			jen.Id("tx"),
-			jen.Index().Op("*").Add(generated.UseEntity(camel)).Values(jen.Id(lowerCamel)),
+			jen.Index().Op("*").Add(helper.UseEntity(camel)).Values(jen.Id(lowerCamel)),
 			jen.Id("fn"),
 		),
 	)
 }
 
-func (rec *GenBaseRepo) genFuncBatchUpdateWithFuncByID(table string, columns []generated.Column) jen.Code {
-	if !generated.HasColumn(generated.P_KEY, columns) {
+func (rec *GenBaseRepo) genFuncBatchUpdateWithFuncByID(table string, columns []helper.Column) jen.Code {
+	if !helper.HasColumn(helper.P_KEY, columns) {
 		return jen.Null()
 	}
 
@@ -729,26 +804,26 @@ func (rec *GenBaseRepo) genFuncBatchUpdateWithFuncByID(table string, columns []g
 	lowerCamel := strcase.ToLowerCamel(table)
 	var sql0, sql1 string
 	sql0 = fmt.Sprintf("UPDATE %s SET ", table)
-	if generated.HasColumn(generated.D_KEY, columns) {
-		if generated.HasColumn(generated.NS_KEY, columns) {
-			sql1 = fmt.Sprintf(" WHERE %s = ? AND %s AND %s;", generated.P_KEY, generated.NS_COND_KEY, generated.UD_COND_KEY)
+	if helper.HasColumn(helper.D_KEY, columns) {
+		if helper.HasColumn(helper.NS_KEY, columns) {
+			sql1 = fmt.Sprintf(" WHERE %s = ? AND %s AND %s;", helper.P_KEY, helper.NS_COND_KEY, helper.UD_COND_KEY)
 		} else {
-			sql1 = fmt.Sprintf(" WHERE %s = ? AND %s;", generated.P_KEY, generated.UD_COND_KEY)
+			sql1 = fmt.Sprintf(" WHERE %s = ? AND %s;", helper.P_KEY, helper.UD_COND_KEY)
 		}
 	} else {
-		if generated.HasColumn(generated.NS_KEY, columns) {
-			sql1 = fmt.Sprintf(" WHERE %s = ? AND %s;", generated.P_KEY, generated.NS_COND_KEY)
+		if helper.HasColumn(helper.NS_KEY, columns) {
+			sql1 = fmt.Sprintf(" WHERE %s = ? AND %s;", helper.P_KEY, helper.NS_COND_KEY)
 		} else {
-			sql1 = fmt.Sprintf(" WHERE %s = ?;", generated.P_KEY)
+			sql1 = fmt.Sprintf(" WHERE %s = ?;", helper.P_KEY)
 		}
 	}
 
 	return jen.Line().Comment("BatchUpdateWithFuncByID 根据 ID 批量更新满足函数的字段").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("BatchUpdateWithFuncByID").Params(
-		jen.Id("tx").Op("*").Add(generated.UseSql("Tx")),
-		jen.Id(lowerCamel+"s").Index().Op("*").Add(generated.UseEntity(camel)),
-		generated.GenDeclAnonymousFunc(),
+		jen.Id("tx").Op("*").Add(helper.UseSql("Tx")),
+		jen.Id(lowerCamel+"s").Index().Op("*").Add(helper.UseEntity(camel)),
+		helper.GenDeclAnonymousFunc(),
 	).Params(jen.Id("bool")).Block(
-		jen.Id("recorder").Op(":=").Add(generated.UseLogger("AccessLogger")).Call(jen.Id("ag").Dot("ctx")),
+		jen.Id("recorder").Op(":=").Add(helper.UseLogger("AccessLogger")).Call(jen.Id("ag").Dot("ctx")),
 		jen.Id("recorder").Dot("Sugar").Call().Dot("Infof").Call(jen.Lit("批量更新列表数据")),
 		jen.For(
 			jen.List(
@@ -765,16 +840,16 @@ func (rec *GenBaseRepo) genFuncBatchUpdateWithFuncByID(table string, columns []g
 				jen.Id(lowerCamel),
 				jen.Id("fn"),
 			),
-			jen.Var().Id("sqlBuilder").Add(generated.UseStrings("Builder")),
+			jen.Var().Id("sqlBuilder").Add(helper.UseStrings("Builder")),
 			jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit(sql0)),
 			jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Id("fields")),
 			jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit(sql1)),
 			jen.Id("values").Op("=").Id("append").Call(
 				jen.Id("values"),
 				jen.Id("id"),
-				generated.AddNsSingleValue(columns),
+				helper.AddNsSingleValue(columns),
 			),
-			jen.Id("errorHandler").Op(":=").Add(generated.UseUtil("ErrToLogAndPanic")).Call(jen.Id("recorder")),
+			jen.Id("errorHandler").Op(":=").Add(helper.UseUtil("ErrToLogAndPanic")).Call(jen.Id("recorder")),
 			jen.List(
 				jen.Id("stmt"),
 				jen.Id("err"),
@@ -800,7 +875,7 @@ func (rec *GenBaseRepo) genFuncBatchUpdateWithFuncByID(table string, columns []g
 	)
 }
 
-func (rec *GenBaseRepo) GenFile(table string, columns []generated.Column) *jen.File {
+func (rec *GenBaseRepo) GenFile(table string, columns []helper.Column) *jen.File {
 	file := jen.NewFile(table)
 
 	file.Add(rec.genInterfaceAutoGen(table, columns))

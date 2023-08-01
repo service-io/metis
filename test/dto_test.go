@@ -47,7 +47,7 @@ func TestDto(t *testing.T) {
 	strcase.ConfigureAcronym("ID", "id")
 	strcase.ConfigureAcronym("id", "ID")
 
-	table := "survey"
+	table := "account"
 	columns := getColumns(table)
 
 	f := genDtoFile(table, columns)
