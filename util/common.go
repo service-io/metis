@@ -125,6 +125,11 @@ func GetAccountID(ctx *gin.Context) int64 {
 	panic("implement me")
 }
 
+func GetNsID(ctx *gin.Context) int64 {
+	// TODO implement me
+	panic("implement me")
+}
+
 // SplitFunc 使用函数进行分割, 注意: 并不会移除符合谓词的字符,
 // 具体实现参考 strings.FieldsFunc 进行修改的,
 // strings.FieldsFunc 会移除符合谓词的字符

@@ -23,10 +23,11 @@ import (
 
 // IAutoGen 基础接口
 type IAutoGen interface {
-	SelectByID(id int64) dto.Account
-	SelectByIDs(ids ...int64) []dto.Account
-	BatchSelectByID(ids []int64) []dto.Account
-	SelectByName(name string) []dto.Account
+	SelectByID(id int64) *entity.Account
+	SelectByIDs(ids ...int64) []*entity.Account
+	BatchSelectByID(ids []int64) []*entity.Account
+
+	SelectByName(name string) []*entity.Account
 
 	Insert(tx *sql.Tx, account *entity.Account) int64
 	BatchInsert(tx *sql.Tx, accounts []*entity.Account) []int64
@@ -52,34 +53,63 @@ func (ag *autoGen) getDbCtx() context.Context {
 	return context.WithValue(context.Background(), constant.TraceIdKey, ag.ctx.GetString(constant.TraceIdKey))
 }
 
-// SelectByID ok
-func (ag *autoGen) SelectByID(id int64) dto.Account {
+func (ag *autoGen) internalSelectNodeByIDs(tx *sql.Tx, db *sql.DB, ids []int64) []*entity.Account {
 	recorder := logger.AccessLogger(ag.ctx)
-	db := database.FetchDB()
+	recorder.Sugar().Infof("查询 ID 列表: %+v 的数据", ids)
 
-	sqlPlaceholder := "SELECT id, title, name FROM account WHERE id = ?;"
+	var sqlBuilder strings.Builder
+	sqlBuilder.WriteString("select ")
+	sqlBuilder.WriteString(allFields())
+	sqlBuilder.WriteString("from <table> ")
+	sqlBuilder.WriteString("where ")
+	sqlBuilder.WriteString("<p_key> ")
+	if len(ids) == 1 {
+		sqlBuilder.WriteString("= ?")
+	} else {
+		sqlBuilder.WriteString("in (")
+		sqlBuilder.WriteString(util.GenPlaceholder(ids))
+		sqlBuilder.WriteString(")")
+	}
+	sqlBuilder.WriteString("<deleted_cond>")
+	sqlBuilder.WriteString(";")
 
-	prepare, _ := db.Prepare(sqlPlaceholder)
-	defer util.DeferClose(prepare, util.ErrToLogAndPanic(recorder))
+	errorHandler := util.ErrToLogAndPanic(recorder)
+	var stmt *sql.Stmt
+	var err error
+	if tx != nil {
+		stmt, err = tx.Prepare(sqlBuilder.String())
+		defer util.DeferClose(stmt, errorHandler)
+		errorHandler(err)
+	} else {
+		stmt, err = db.Prepare(sqlBuilder.String())
+		defer util.DeferClose(stmt, errorHandler)
+		errorHandler(err)
+	}
+	bindValues := util.ToAnyItems(ids)
+	rows, err := stmt.QueryContext(ag.getDbCtx(), bindValues...)
+	errorHandler(err)
+	defer util.DeferClose(rows, errorHandler)
+	ds := util.Rows(rows, mapperAll)
+	return ds
+}
 
-	row := prepare.QueryRowContext(ag.getDbCtx(), id)
-
-	account := util.Row(row, func() (*dto.Account, []any) {
-		var r = &dto.Account{}
-		var cs = []any{&r.ID, &r.Title, &r.Name}
-		return r, cs
-	})
-
-	return account
+// SelectByID ok
+func (ag *autoGen) SelectByID(id int64) *entity.Account {
+	ds := ag.BatchSelectByID([]int64{id})
+	if len(ds) == 1 {
+		return ds[0]
+	}
+	return nil
 }
 
 // SelectByIDs ok
-func (ag *autoGen) SelectByIDs(ids ...int64) []dto.Account {
-	return ag.BatchSelectByID(ids)
+func (ag *autoGen) SelectByIDs(ids ...int64) []*entity.Account {
+	ds := ag.BatchSelectByID(ids)
+	return ds
 }
 
 // BatchSelectByID ok
-func (ag *autoGen) BatchSelectByID(ids []int64) []dto.Account {
+func (ag *autoGen) BatchSelectByID(ids []int64) []*entity.Account {
 	placeholder := make([]string, len(ids))
 
 	for i := 0; i < len(ids); i++ {

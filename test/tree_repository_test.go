@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/dave/jennifer/jen"
 	"github.com/iancoleman/strcase"
+	"metis/generated"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,6 +19,8 @@ const (
 	tn_key      = "tree_no"
 	d_key       = "deleted"
 	n_key       = "name"
+	ns_key      = "ns_id"
+	ns_cond_key = "ns_id = ?"
 	ud_cond_key = "deleted = 0"
 	dd_cond_key = "deleted = 1"
 	cb_key      = "create_by"
@@ -27,7 +30,7 @@ const (
 )
 
 func genDeclAnonymousFunc() jen.Code {
-	return jen.Id("fn").Func().Params(jen.Id("f").Id("any")).Params(jen.Id("bool"))
+	return jen.Id("fn").Func().Params(jen.Id("fs").Id("any")).Params(jen.Id("bool"))
 }
 
 func useDto(name string) jen.Code {
@@ -121,11 +124,11 @@ func renderStarField(sn, field string) jen.Code {
 func genInterfaceAutoGen(table string, columns []Column) jen.Code {
 	camel := strcase.ToCamel(table)
 	lowerCamel := strcase.ToLowerCamel(table)
-	return jen.Type().Id("iAutoGen").Interface(
-		jen.Id("SelectByID").Params(jen.Id("id").Id("int64")).Params(jen.Op("*").Add(useEntity(camel))),
-		jen.Id("SelectByIDs").Params(jen.Id("ids").Op("...").Id("int64")).Params(jen.Index().Op("*").Add(useEntity(camel))),
-		jen.Id("BatchSelectByID").Params(jen.Id("ids").Index().Id("int64")).Params(jen.Index().Op("*").Add(useEntity(camel))),
-		jen.Id("SelectByName").Params(jen.Id("name").Id("string")).Params(jen.Index().Op("*").Add(useEntity(camel))),
+	return jen.Comment("iAutoGen 该接口自动生成, 请勿修改").Line().Type().Id("iAutoGen").Interface(
+		inferColumn(jen.Id("SelectByID").Params(jen.Id("id").Id("int64")).Params(jen.Op("*").Add(useEntity(camel))), "id", columns),
+		inferColumn(jen.Id("SelectByIDs").Params(jen.Id("ids").Op("...").Id("int64")).Params(jen.Index().Op("*").Add(useEntity(camel))), "id", columns),
+		inferColumn(jen.Id("BatchSelectByID").Params(jen.Id("ids").Index().Id("int64")).Params(jen.Index().Op("*").Add(useEntity(camel))), "id", columns),
+		inferColumn(jen.Id("SelectByName").Params(jen.Id("name").Id("string")).Params(jen.Index().Op("*").Add(useEntity(camel))), "name", columns),
 		jen.Id("SelectMaxLevel").Params(jen.Id("treeNo").Id("int")).Params(jen.Id("int")),
 		jen.Id("SelectMaxRight").Params(jen.Id("treeNo").Id("int")).Params(jen.Id("int")),
 		jen.Id("SelectMaxLeft").Params(jen.Id("treeNo").Id("int")).Params(jen.Id("int")),
@@ -135,140 +138,43 @@ func genInterfaceAutoGen(table string, columns []Column) jen.Code {
 		jen.Id("SelectBrother").Params(jen.Id("id").Id("int64")).Params(jen.Index().Op("*").Add(useEntity(camel))),
 		jen.Id("SelectBrotherAndSelf").Params(jen.Id("id").Id("int64")).Params(jen.Index().Op("*").Add(useEntity(camel))),
 		jen.Id("SelectAncestorChain").Params(jen.Id("id").Id("int64")).Params(jen.Index().Op("*").Add(useEntity(camel))),
-		jen.Id("SelectAncestor").Params(
-			jen.Id("id").Id("int64"), jen.Id("level").Id("int"),
-		).Params(jen.Op("*").Add(useEntity(camel))),
+		jen.Id("SelectAncestor").Params(jen.Id("id").Id("int64"), jen.Id("level").Id("int")).Params(jen.Op("*").Add(useEntity(camel))),
 		jen.Id("SelectParent").Params(jen.Id("id").Id("int64")).Params(jen.Op("*").Add(useEntity(camel))),
-		jen.Id("SelectByTreeNoAndLevel").Params(
-			jen.List(jen.Id("treeNo"), jen.Id("level")).Id("int"),
-		).Params(jen.Index().Op("*").Add(useEntity(camel))),
+		jen.Id("SelectByTreeNoAndLevel").Params(jen.List(jen.Id("treeNo"), jen.Id("level")).Id("int")).Params(jen.Index().Op("*").Add(useEntity(camel))),
 		jen.Id("SelectByLevel").Params(jen.Id("level").Id("int")).Params(jen.Index().Op("*").Add(useEntity(camel))),
 		jen.Id("SelectRoot").Params(jen.Id("id").Id("int64")).Params(jen.Op("*").Add(useEntity(camel))),
-		jen.Id("SelectLeaf").Params(
-			jen.Id("id").Id("int64"),
-			jen.List(jen.Id("page"), jen.Id("size")).Id("uint"),
-		).Params(jen.Index().Op("*").Add(useEntity(camel)), jen.Id("int64")),
-		jen.Id("SelectAllLeaf").Params(jen.Id("id").Id("int64")).Params(jen.Index().Op("*").Add(useEntity(camel))),
+		jen.Id("SelectLeafOfNodeWithPage").Params(jen.Id("id").Id("int64"), jen.List(jen.Id("page"), jen.Id("size")).Id("uint")).Params(jen.Index().Op("*").Add(useEntity(camel)), jen.Id("int64")),
+		jen.Id("SelectAllLeafOfNode").Params(jen.Id("id").Id("int64")).Params(jen.Index().Op("*").Add(useEntity(camel))),
 		jen.Id("SelectAllRoot").Params().Params(jen.Index().Op("*").Add(useEntity(camel))),
-		jen.Id("Insert").Params(
-			jen.Id("tx").Op("*").Qual("database/sql", "Tx"),
-			jen.Id(lowerCamel).Op("*").Add(useEntity(camel)),
-		).Params(jen.Id("int64")),
-		jen.Id("InsertUnderNode").Params(
-			jen.Id("tx").Op("*").Qual("database/sql", "Tx"),
-			jen.Id(lowerCamel).Op("*").Add(useEntity(camel)),
-			jen.Id("pid").Id("int64"),
-		).Params(jen.Id("int64")),
-		jen.Id("InsertBetweenNode").Params(
-			jen.Id("tx").Op("*").Qual("database/sql", "Tx"),
-			jen.Id(lowerCamel).Op("*").Add(useEntity(camel)),
-			jen.List(
-				jen.Id("pid"),
-				jen.Id("sid"),
-			).Id("int64"),
-		).Params(jen.Id("int64")),
-		jen.Id("BatchInsert").Params(
-			jen.Id("tx").Op("*").Qual("database/sql", "Tx"),
-			jen.Id(lowerCamel+"s").Index().Op("*").Add(useEntity(camel)),
-		).Params(jen.Index().Id("int64")),
-		jen.Id("BatchInsertUnderNode").Params(
-			jen.Id("tx").Op("*").Qual("database/sql", "Tx"),
-			jen.Id(lowerCamel+"s").Index().Op("*").Add(useEntity(camel)),
-			jen.Id("pid").Id("int64"),
-		).Params(jen.Index().Id("int64")),
-		jen.Id("BatchInsertBetweenNode").Params(
-			jen.Id("tx").Op("*").Qual("database/sql", "Tx"),
-			jen.Id(lowerCamel+"s").Index().Op("*").Add(useEntity(camel)),
-			jen.List(
-				jen.Id("pid"),
-				jen.Id("sid"),
-			).Id("int64"),
-		).Params(jen.Index().Id("int64")),
-		jen.Id("InsertNonNil").Params(
-			jen.Id("tx").Op("*").Qual("database/sql", "Tx"),
-			jen.Id(lowerCamel).Op("*").Add(useEntity(camel)),
-		).Params(jen.Id("int64")),
-		jen.Id("InsertNonNilUnderNode").Params(
-			jen.Id("tx").Op("*").Qual("database/sql", "Tx"),
-			jen.Id(lowerCamel).Op("*").Add(useEntity(camel)),
-			jen.Id("pid").Id("int64"),
-		).Params(jen.Id("int64")),
-		jen.Id("InsertNonNilBetweenNode").Params(
-			jen.Id("tx").Op("*").Qual("database/sql", "Tx"),
-			jen.Id(lowerCamel).Op("*").Add(useEntity(camel)),
-			jen.List(
-				jen.Id("pid"),
-				jen.Id("sid"),
-			).Id("int64"),
-		).Params(jen.Id("int64")),
-		jen.Id("InsertWithFunc").Params(
-			jen.Id("tx").Op("*").Qual("database/sql", "Tx"),
-			jen.Id(lowerCamel).Op("*").Add(useEntity(camel)),
-			jen.Id("fn").Params(jen.Id("f").Id("any")).Params(jen.Id("bool")),
-		).Params(jen.Id("int64")),
-		jen.Id("InsertWithFuncUnderNode").Params(
-			jen.Id("tx").Op("*").Qual("database/sql", "Tx"),
-			jen.Id(lowerCamel).Op("*").Add(useEntity(camel)),
-			jen.Id("pid").Id("int64"),
-			jen.Id("fn").Params(jen.Id("f").Id("any")).Params(jen.Id("bool")),
-		).Params(jen.Id("int64")),
-		jen.Id("InsertWithFuncBetweenNode").Params(
-			jen.Id("tx").Op("*").Qual("database/sql", "Tx"),
-			jen.Id(lowerCamel).Op("*").Add(useEntity(camel)),
-			jen.List(
-				jen.Id("pid"),
-				jen.Id("sid"),
-			).Id("int64"),
-			jen.Id("fn").Params(jen.Id("f").Id("any")).Params(jen.Id("bool")),
-		).Params(jen.Id("int64")),
-		jen.Id("BatchInsertWithFunc").Params(
-			jen.Id("tx").Op("*").Qual("database/sql", "Tx"),
-			jen.Id(lowerCamel+"s").Index().Op("*").Add(useEntity(camel)),
-			jen.List(
-				jen.Id("pid"),
-				jen.Id("sid"),
-			).Id("int64"),
-			jen.Id("fn").Params(jen.Id("f").Id("any")).Params(jen.Id("bool")),
-		).Params(jen.Index().Id("int64")),
-		jen.Id("DeleteByID").Params(
-			jen.Id("tx").Op("*").Qual("database/sql", "Tx"),
-			jen.Id("id").Id("int64"),
-		).Params(jen.Id("bool")),
-		jen.Id("DeleteByIDs").Params(
-			jen.Id("tx").Op("*").Qual("database/sql", "Tx"),
-			jen.Id("ids").Op("...").Id("int64"),
-		).Params(jen.Id("bool")),
-		jen.Id("BatchDeleteByID").Params(
-			jen.Id("tx").Op("*").Qual("database/sql", "Tx"),
-			jen.Id("ids").Index().Id("int64"),
-		).Params(jen.Id("bool")),
-		jen.Id("UpdateByID").Params(
-			jen.Id("tx").Op("*").Qual("database/sql", "Tx"),
-			jen.Id(lowerCamel).Op("*").Add(useEntity(camel)),
-		).Params(jen.Id("bool")),
-		jen.Id("UpdateNonNilByID").Params(
-			jen.Id("tx").Op("*").Qual("database/sql", "Tx"),
-			jen.Id(lowerCamel).Op("*").Add(useEntity(camel)),
-		).Params(jen.Id("bool")),
-		jen.Id("UpdateWithFuncByID").Params(
-			jen.Id("tx").Op("*").Qual("database/sql", "Tx"),
-			jen.Id(lowerCamel).Op("*").Add(useEntity(camel)),
-			jen.Id("fn").Params(jen.Id("f").Id("any")).Params(jen.Id("bool")),
-		).Params(jen.Id("bool")),
-		jen.Id("BatchUpdateWithFuncByID").Params(
-			jen.Id("tx").Op("*").Qual("database/sql", "Tx"),
-			jen.Id(lowerCamel+"s").Index().Op("*").Add(useEntity(camel)),
-			jen.Id("fn").Params(jen.Id("f").Id("any")).Params(jen.Id("bool")),
-		).Params(jen.Id("bool")),
+		jen.Id("Insert").Params(jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel).Op("*").Add(useEntity(camel))).Params(jen.Id("int64")),
+		jen.Id("InsertUnderNode").Params(jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel).Op("*").Add(useEntity(camel)), jen.Id("pid").Id("int64")).Params(jen.Id("int64")),
+		jen.Id("InsertBetweenNode").Params(jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel).Op("*").Add(useEntity(camel)), jen.List(jen.Id("pid"), jen.Id("sid")).Id("int64")).Params(jen.Id("int64")),
+		jen.Id("BatchInsert").Params(jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel+"s").Index().Op("*").Add(useEntity(camel))).Params(jen.Index().Id("int64")),
+		jen.Id("BatchInsertUnderNode").Params(jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel+"s").Index().Op("*").Add(useEntity(camel)), jen.Id("pid").Id("int64")).Params(jen.Index().Id("int64")),
+		jen.Id("BatchInsertBetweenNode").Params(jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel+"s").Index().Op("*").Add(useEntity(camel)), jen.List(jen.Id("pid"), jen.Id("sid")).Id("int64")).Params(jen.Index().Id("int64")),
+		jen.Id("InsertNonNil").Params(jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel).Op("*").Add(useEntity(camel))).Params(jen.Id("int64")),
+		jen.Id("InsertNonNilUnderNode").Params(jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel).Op("*").Add(useEntity(camel)), jen.Id("pid").Id("int64")).Params(jen.Id("int64")),
+		jen.Id("InsertNonNilBetweenNode").Params(jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel).Op("*").Add(useEntity(camel)), jen.List(jen.Id("pid"), jen.Id("sid")).Id("int64")).Params(jen.Id("int64")),
+		jen.Id("InsertWithFunc").Params(jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel).Op("*").Add(useEntity(camel)), genDeclAnonymousFunc()).Params(jen.Id("int64")),
+		jen.Id("InsertWithFuncUnderNode").Params(jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel).Op("*").Add(useEntity(camel)), jen.Id("pid").Id("int64"), genDeclAnonymousFunc()).Params(jen.Id("int64")),
+		jen.Id("InsertWithFuncBetweenNode").Params(jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel).Op("*").Add(useEntity(camel)), jen.List(jen.Id("pid"), jen.Id("sid")).Id("int64"), genDeclAnonymousFunc()).Params(jen.Id("int64")),
+		jen.Id("BatchInsertWithFunc").Params(jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel+"s").Index().Op("*").Add(useEntity(camel)), jen.List(jen.Id("pid"), jen.Id("sid")).Id("int64"), genDeclAnonymousFunc()).Params(jen.Index().Id("int64")),
+		inferColumn(jen.Id("DeleteByID").Params(jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id("id").Id("int64")).Params(jen.Id("bool")), "id", columns),
+		inferColumn(jen.Id("DeleteByIDs").Params(jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id("ids").Op("...").Id("int64")).Params(jen.Id("bool")), "id", columns),
+		inferColumn(jen.Id("BatchDeleteByID").Params(jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id("ids").Index().Id("int64")).Params(jen.Id("bool")), "id", columns),
+		inferColumn(jen.Id("UpdateByID").Params(jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel).Op("*").Add(useEntity(camel))).Params(jen.Id("bool")), "id", columns),
+		inferColumn(jen.Id("UpdateNonNilByID").Params(jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel).Op("*").Add(useEntity(camel))).Params(jen.Id("bool")), "id", columns),
+		inferColumn(jen.Id("UpdateWithFuncByID").Params(jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel).Op("*").Add(useEntity(camel)), genDeclAnonymousFunc()).Params(jen.Id("bool")), "id", columns),
+		inferColumn(jen.Id("BatchUpdateWithFuncByID").Params(jen.Id("tx").Op("*").Add(useSql("Tx")), jen.Id(lowerCamel+"s").Index().Op("*").Add(useEntity(camel)), genDeclAnonymousFunc()).Params(jen.Id("bool")), "id", columns),
 	)
 }
 
 func genStructAutoGen() jen.Code {
-	return jen.Type().Id("autoGen").Struct(jen.Id("ctx").Op("*").Add(useGin("Context")))
+	return jen.Line().Comment("autoGen 该结构体自动生成, 请勿修改").Line().Type().Id("autoGen").Struct(jen.Id("ctx").Op("*").Add(useGin("Context")))
 }
 
 func genFuncGetDbCtx() jen.Code {
-	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("getDbCtx").
+	return jen.Line().Comment("getDbCtx 获取 DB 的初始上下文").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("getDbCtx").
 		Params().Params(useContext("Context")).
 		Block(
 			jen.Return().Add(useContext("WithValue")).Call(
@@ -287,7 +193,7 @@ func genFuncMapperAll(table string, columns []Column) jen.Code {
 
 	camel := strcase.ToCamel(table)
 
-	return jen.Func().Id("mapperAll").Params().
+	return jen.Line().Comment("mapperAll 映射实体的所有字体").Line().Func().Id("mapperAll").Params().
 		Params(
 			jen.Op("*").Add(useEntity(camel)),
 			jen.Index().Id("any"),
@@ -305,7 +211,7 @@ func genFuncMapperAll(table string, columns []Column) jen.Code {
 }
 
 func genFuncMapperNumeric() jen.Code {
-	return jen.Func().Id("mapperNumeric").Params().Params(
+	return jen.Line().Comment("mapperNumeric 映射数值型").Line().Func().Id("mapperNumeric").Types(jen.Id("T").Union(jen.Int(), jen.Int64())).Params().Params(
 		jen.Op("*").Id("T"),
 		jen.Index().Id("any"),
 	).Block(
@@ -326,14 +232,22 @@ func allFields(columns []Column) string {
 	return strings.Join(fields, ", ")
 }
 
-func genFuncTreeFields(table string, columns []Column) jen.Code {
+func genFuncTreeInfoSelectSql(table string, columns []Column) jen.Code {
 	var sql string
 	if hasColumn(d_key, columns) {
-		sql = fmt.Sprintf("SELECT %s, %s, %s FROM %s WHERE %s = ? AND %s;", l_key, r_key, tn_key, table, p_key, ud_cond_key)
+		if hasColumn(ns_key, columns) {
+			sql = fmt.Sprintf("SELECT %s, %s, %s, %s FROM %s WHERE %s = ? AND %s = ? AND %s;", l_key, r_key, ll_key, tn_key, table, p_key, ns_key, ud_cond_key)
+		} else {
+			sql = fmt.Sprintf("SELECT %s, %s, %s, %s FROM %s WHERE %s = ? AND %s;", l_key, r_key, ll_key, tn_key, table, p_key, ud_cond_key)
+		}
 	} else {
-		sql = fmt.Sprintf("SELECT %s, %s, %s FROM %s WHERE %s = ?;", l_key, r_key, tn_key, table, p_key)
+		if hasColumn(ns_key, columns) {
+			sql = fmt.Sprintf("SELECT %s, %s, %s, %s FROM %s WHERE %s = ? AND %s = ?;", l_key, r_key, ll_key, tn_key, table, p_key, ns_key)
+		} else {
+			sql = fmt.Sprintf("SELECT %s, %s, %s, %s FROM %s WHERE %s = ?;", l_key, r_key, ll_key, tn_key, table, p_key)
+		}
 	}
-	return jen.Func().Id("treeFields").Params().Params(jen.Id("string")).Block(jen.Return().Id(sql))
+	return jen.Line().Comment("treeInfoSelectSql 获取树型表的基础信息").Line().Func().Id("treeInfoSelectSql").Params().Params(jen.Id("string")).Block(jen.Return().Lit(sql))
 }
 
 func genFuncCalcInsertField(table string, columns []Column) jen.Code {
@@ -360,7 +274,7 @@ func genFuncCalcInsertField(table string, columns []Column) jen.Code {
 			),
 			jen.Id("values").Op("=").Id("append").Call(
 				jen.Id("values"),
-				jen.Id(lowerCamel).Dot(fieldName),
+				renderStarField(lowerCamel, columnName),
 			),
 		)
 		codes = append(codes, code)
@@ -368,11 +282,11 @@ func genFuncCalcInsertField(table string, columns []Column) jen.Code {
 
 	codes = append(
 		codes, jen.Return().List(
-			jen.Qual("strings", "Join").Call(
+			jen.Add(useStrings("Join")).Call(
 				jen.Id("fields"),
 				jen.Lit(", "),
 			),
-			jen.Qual("strings", "Join").Call(
+			jen.Add(useStrings("Join")).Call(
 				jen.Id("places"),
 				jen.Lit(", "),
 			),
@@ -380,9 +294,9 @@ func genFuncCalcInsertField(table string, columns []Column) jen.Code {
 		),
 	)
 
-	return jen.Func().Id("calcInsertField").Params(
+	return jen.Line().Comment("calcInsertField 计算待插入的字段").Line().Func().Id("calcInsertField").Params(
 		jen.Id(lowerCamel).Op("*").Add(useEntity(camel)),
-		jen.Id("fn").Params(jen.Id("f").Id("any")).Params(jen.Id("bool")),
+		genDeclAnonymousFunc(),
 	).Params(
 		jen.Id("string"),
 		jen.Id("string"),
@@ -409,7 +323,7 @@ func genFuncCalcUpdateField(table string, columns []Column) jen.Code {
 			),
 			jen.Id("values").Op("=").Id("append").Call(
 				jen.Id("values"),
-				jen.Id(lowerCamel).Dot(fieldName),
+				renderStarField(lowerCamel, columnName),
 			),
 		)
 		codes = append(codes, code)
@@ -417,7 +331,7 @@ func genFuncCalcUpdateField(table string, columns []Column) jen.Code {
 
 	codes = append(
 		codes, jen.Return().List(
-			jen.Qual("strings", "Join").Call(
+			jen.Add(useStrings("Join")).Call(
 				jen.Id("fields"),
 				jen.Lit(", "),
 			),
@@ -425,9 +339,9 @@ func genFuncCalcUpdateField(table string, columns []Column) jen.Code {
 		),
 	)
 
-	return jen.Func().Id("calcUpdateField").Params(
+	return jen.Line().Comment("calcUpdateField 计算待更新的字段").Line().Func().Id("calcUpdateField").Params(
 		jen.Id(lowerCamel).Op("*").Add(useEntity(camel)),
-		jen.Id("fn").Params(jen.Id("f").Id("any")).Params(jen.Id("bool")),
+		genDeclAnonymousFunc(),
 	).Params(
 		jen.Id("string"),
 		jen.Index().Id("any"),
@@ -435,24 +349,28 @@ func genFuncCalcUpdateField(table string, columns []Column) jen.Code {
 }
 
 func genFuncInternalSelectNodeByIDs(table string, columns []Column) jen.Code {
+	if !hasColumn(p_key, columns) {
+		return jen.Null()
+	}
+
 	camel := strcase.ToCamel(table)
-	//lowerCamel := strcase.ToLowerCamel(table)
+	// lowerCamel := strcase.ToLowerCamel(table)
 
 	fields := allFields(columns)
 
 	sql := fmt.Sprintf("SELECT %s FROM %s WHERE %s ", fields, table, p_key)
 
-	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("internalSelectNodeByIDs").Params(
+	return jen.Line().Comment("internalSelectNodeByIDs 根据 ID 列表插入节点").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("internalSelectNodeByIDs").Params(
 		jen.Id("tx").Op("*").Add(useSql("Tx")),
 		jen.Id("db").Op("*").Add(useSql("DB")),
 		jen.Id("ids").Index().Id("int64"),
 	).Params(jen.Index().Op("*").Add(useEntity(camel))).Block(
-		jen.Id("recorder").Op(":=").Id("logger").Dot("AccessLogger").Call(jen.Id("ag").Dot("ctx")),
+		jen.Id("recorder").Op(":=").Add(useLogger("AccessLogger")).Call(jen.Id("ag").Dot("ctx")),
 		jen.Id("recorder").Dot("Sugar").Call().Dot("Infof").Call(
 			jen.Lit("查询 ID 列表: %+v 的数据"),
 			jen.Id("ids"),
 		),
-		jen.Var().Id("sqlBuilder").Qual("strings", "Builder"),
+		jen.Var().Id("sqlBuilder").Add(useStrings("Builder")),
 		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit(sql)),
 		jen.If(jen.Id("len").Call(jen.Id("ids")).Op("==").Lit(1)).Block(
 			jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("= ?")),
@@ -511,12 +429,12 @@ func genFuncInternalDirectInsert(table string, columns []Column) jen.Code {
 	camel := strcase.ToCamel(table)
 	lowerCamel := strcase.ToLowerCamel(table)
 
-	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("internalDirectInsert").Params(
+	return jen.Line().Comment("internalDirectInsert 直接插入树节点, 需要提前计算好树相关信息").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("internalDirectInsert").Params(
 		jen.Id("tx").Op("*").Add(useSql("Tx")),
 		jen.Id(lowerCamel).Op("*").Add(useEntity(camel)),
-		jen.Id("fn").Params(jen.Id("f").Id("any")).Params(jen.Id("bool")),
+		genDeclAnonymousFunc(),
 	).Params(jen.Id("int64")).Block(
-		jen.Id("recorder").Op(":=").Id("logger").Dot("AccessLogger").Call(jen.Id("ag").Dot("ctx")),
+		jen.Id("recorder").Op(":=").Add(useLogger("AccessLogger")).Call(jen.Id("ag").Dot("ctx")),
 		jen.If(jen.Id(lowerCamel).Dot("TreeNo").Op("==").Id("nil")).Block(jen.Id("panic").Call(jen.Lit("需要填充树号"))),
 		jen.If(jen.Id(lowerCamel).Dot("Left").Op("==").Id("nil")).Block(jen.Id("panic").Call(jen.Lit("需要填充左值"))),
 		jen.If(jen.Id(lowerCamel).Dot("Right").Op("==").Id("nil")).Block(jen.Id("panic").Call(jen.Lit("需要填充右值"))),
@@ -529,7 +447,7 @@ func genFuncInternalDirectInsert(table string, columns []Column) jen.Code {
 			jen.Id(lowerCamel),
 			jen.Id("fn"),
 		),
-		jen.Var().Id("sqlBuilder").Qual("strings", "Builder"),
+		jen.Var().Id("sqlBuilder").Add(useStrings("Builder")),
 		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("INSERT INTO "+table+"(")),
 		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Id("fields")),
 		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit(") VALUES (")),
@@ -569,10 +487,21 @@ func genFuncInternalDirectInsert(table string, columns []Column) jen.Code {
 }
 
 func genFuncInternalUpdateNodeInBothWhenInsert(table string, columns []Column) jen.Code {
-	camel := strcase.ToCamel(table)
-	lowerCamel := strcase.ToLowerCamel(table)
+	// camel := strcase.ToCamel(table)
+	// lowerCamel := strcase.ToLowerCamel(table)
 
-	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("internalUpdateNodeInBothWhenInsert").Params(
+	var sql0, sql1, sql2 string
+	if hasColumn(d_key, columns) {
+		sql0 = fmt.Sprintf("UPDATE %s SET %s = %s + 2 WHERE %s > ? AND %s = ? AND %s;", table, l_key, l_key, l_key, tn_key, ud_cond_key)
+		sql1 = fmt.Sprintf("UPDATE %s SET %s = %s + 2 WHERE %s > ? AND %s = ? AND %s;", table, r_key, r_key, r_key, tn_key, ud_cond_key)
+		sql2 = fmt.Sprintf("UPDATE %s SET %s = %s + 1, %s = %s + 1, %s = %s + 1 WHERE %s >= ? AND %s <= ? AND %s = ? AND %s;", table, l_key, l_key, r_key, r_key, ll_key, ll_key, ll_key, r_key, tn_key, ud_cond_key)
+	} else {
+		sql0 = fmt.Sprintf("UPDATE %s SET %s = %s + 2 WHERE %s > ? AND %s = ?;", table, l_key, l_key, l_key, tn_key)
+		sql1 = fmt.Sprintf("UPDATE %s SET %s = %s + 2 WHERE %s > ? AND %s = ?;", table, r_key, r_key, r_key, tn_key)
+		sql2 = fmt.Sprintf("UPDATE %s SET %s = %s + 1, %s = %s + 1, %s = %s + 1 WHERE %s >= ? AND %s <= ? AND %s = ?;", table, l_key, l_key, r_key, r_key, ll_key, ll_key, ll_key, r_key, tn_key)
+	}
+
+	return jen.Line().Comment("internalUpdateNodeInBothWhenInsert 在两个节点间插入时更新").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("internalUpdateNodeInBothWhenInsert").Params(
 		jen.Id("tx").Op("*").Add(useSql("Tx")),
 		jen.List(
 			jen.Id("left"),
@@ -580,43 +509,13 @@ func genFuncInternalUpdateNodeInBothWhenInsert(table string, columns []Column) j
 			jen.Id("treeNo"),
 		).Id("int"),
 	).Block(
-		jen.Id("recorder").Op(":=").Id("logger").Dot("AccessLogger").Call(jen.Id("ag").Dot("ctx")),
-		jen.Var().Id("firstSqlBuilder").Qual("strings", "Builder"),
-		jen.Id("firstSqlBuilder").Dot("WriteString").Call(jen.Lit("update ")),
-		jen.Id("firstSqlBuilder").Dot("WriteString").Call(jen.Lit("<table>")),
-		jen.Id("firstSqlBuilder").Dot("WriteString").Call(jen.Lit("set <l_key> = <l_key> + 2 ")),
-		jen.Id("firstSqlBuilder").Dot("WriteString").Call(jen.Lit("where ")),
-		jen.Id("firstSqlBuilder").Dot("WriteString").Call(jen.Lit("<l_key> > ? and")),
-		jen.Id("firstSqlBuilder").Dot("WriteString").Call(jen.Lit("<tn_key> = ?")),
-		jen.Id("firstSqlBuilder").Dot("WriteString").Call(jen.Lit("<deleted_cond>")),
-		jen.Id("firstSqlBuilder").Dot("WriteString").Call(jen.Lit(";")),
-		jen.Var().Id("secondSqlBuilder").Qual("strings", "Builder"),
-		jen.Id("secondSqlBuilder").Dot("WriteString").Call(jen.Lit("update ")),
-		jen.Id("secondSqlBuilder").Dot("WriteString").Call(jen.Lit("<table>")),
-		jen.Id("secondSqlBuilder").Dot("WriteString").Call(jen.Lit("set <r_key> = <r_key> + 2 ")),
-		jen.Id("secondSqlBuilder").Dot("WriteString").Call(jen.Lit("where ")),
-		jen.Id("secondSqlBuilder").Dot("WriteString").Call(jen.Lit("<r_key> > ? and")),
-		jen.Id("secondSqlBuilder").Dot("WriteString").Call(jen.Lit("<tn_key> = ?")),
-		jen.Id("secondSqlBuilder").Dot("WriteString").Call(jen.Lit("<deleted_cond>")),
-		jen.Id("secondSqlBuilder").Dot("WriteString").Call(jen.Lit(";")),
-		jen.Var().Id("thirdSqlBuilder").Qual("strings", "Builder"),
-		jen.Id("thirdSqlBuilder").Dot("WriteString").Call(jen.Lit("update ")),
-		jen.Id("thirdSqlBuilder").Dot("WriteString").Call(jen.Lit("<table>")),
-		jen.Id("thirdSqlBuilder").Dot("WriteString").Call(jen.Lit("set <l_key> = <l_key> + 1 ")),
-		jen.Id("thirdSqlBuilder").Dot("WriteString").Call(jen.Lit("<r_key> = <r_key> + 1 ")),
-		jen.Id("thirdSqlBuilder").Dot("WriteString").Call(jen.Lit("<ll_key> = <ll_key> + 1 ")),
-		jen.Id("thirdSqlBuilder").Dot("WriteString").Call(jen.Lit("where ")),
-		jen.Id("thirdSqlBuilder").Dot("WriteString").Call(jen.Lit("<l_key> >= ? and")),
-		jen.Id("thirdSqlBuilder").Dot("WriteString").Call(jen.Lit("<r_key> <= ? and")),
-		jen.Id("thirdSqlBuilder").Dot("WriteString").Call(jen.Lit("<tn_key> = ?")),
-		jen.Id("thirdSqlBuilder").Dot("WriteString").Call(jen.Lit("<deleted_cond>")),
-		jen.Id("thirdSqlBuilder").Dot("WriteString").Call(jen.Lit(";")),
-		jen.Id("errorHandler").Op(":=").Qual("metis/util", "ErrToLogAndPanic").Call(jen.Id("recorder")),
+		jen.Id("recorder").Op(":=").Add(useLogger("AccessLogger")).Call(jen.Id("ag").Dot("ctx")),
+		jen.Id("errorHandler").Op(":=").Add(useUtil("ErrToLogAndPanic")).Call(jen.Id("recorder")),
 		jen.List(
 			jen.Id("stmt"),
 			jen.Id("err"),
-		).Op(":=").Id("tx").Dot("Prepare").Call(jen.Id("firstSqlBuilder").Dot("String").Call()),
-		jen.Defer().Qual("metis/util", "DeferClose").Call(
+		).Op(":=").Id("tx").Dot("Prepare").Call(jen.Lit(sql0)),
+		jen.Defer().Add(useUtil("DeferClose")).Call(
 			jen.Id("stmt"),
 			jen.Id("errorHandler"),
 		),
@@ -638,8 +537,8 @@ func genFuncInternalUpdateNodeInBothWhenInsert(table string, columns []Column) j
 		jen.List(
 			jen.Id("stmt"),
 			jen.Id("err"),
-		).Op("=").Id("tx").Dot("Prepare").Call(jen.Id("secondSqlBuilder").Dot("String").Call()),
-		jen.Defer().Qual("metis/util", "DeferClose").Call(
+		).Op("=").Id("tx").Dot("Prepare").Call(jen.Lit(sql1)),
+		jen.Defer().Add(useUtil("DeferClose")).Call(
 			jen.Id("stmt"),
 			jen.Id("errorHandler"),
 		),
@@ -661,8 +560,8 @@ func genFuncInternalUpdateNodeInBothWhenInsert(table string, columns []Column) j
 		jen.List(
 			jen.Id("stmt"),
 			jen.Id("err"),
-		).Op("=").Id("tx").Dot("Prepare").Call(jen.Id("thirdSqlBuilder").Dot("String").Call()),
-		jen.Defer().Qual("metis/util", "DeferClose").Call(
+		).Op("=").Id("tx").Dot("Prepare").Call(jen.Lit(sql2)),
+		jen.Defer().Add(useUtil("DeferClose")).Call(
 			jen.Id("stmt"),
 			jen.Id("errorHandler"),
 		),
@@ -685,41 +584,30 @@ func genFuncInternalUpdateNodeInBothWhenInsert(table string, columns []Column) j
 	)
 }
 
-func genFuncinternalUpdateNodeInOnlyPrecursorWhenInsert() jen.Code {
-	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("internalUpdateNodeInOnlyPrecursorWhenInsert").Params(
-		jen.Id("tx").Op("*").Qual(
-			"database/sql", "Tx",
-		),
+func genFuncInternalUpdateNodeInOnlyPrecursorWhenInsert(table string, columns []Column) jen.Code {
+	var sql0, sql1 string
+	if hasColumn(d_key, columns) {
+		sql0 = fmt.Sprintf("UPDATE %s SET %s = %s + 2 WHERE %s > ? AND %s = ? AND %s;", table, l_key, l_key, l_key, tn_key, ud_cond_key)
+		sql1 = fmt.Sprintf("UPDATE %s SET %s = %s + 2 WHERE %s >= ? AND %s = ? AND %s;", table, r_key, r_key, r_key, tn_key, ud_cond_key)
+	} else {
+		sql0 = fmt.Sprintf("UPDATE %s SET %s = %s + 2 WHERE %s > ? AND %s = ?;", table, l_key, l_key, l_key, tn_key)
+		sql1 = fmt.Sprintf("UPDATE %s SET %s = %s + 2 WHERE %s >= ? AND %s = ?;", table, r_key, r_key, r_key, tn_key)
+	}
+
+	return jen.Line().Comment("internalUpdateNodeInOnlyPrecursorWhenInsert 插入至前驱节点时更新").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("internalUpdateNodeInOnlyPrecursorWhenInsert").Params(
+		jen.Id("tx").Op("*").Add(useSql("Tx")),
 		jen.List(
 			jen.Id("right"),
 			jen.Id("treeNo"),
 		).Id("int"),
 	).Block(
-		jen.Id("recorder").Op(":=").Id("logger").Dot("AccessLogger").Call(jen.Id("ag").Dot("ctx")),
-		jen.Var().Id("firstSqlBuilder").Qual("strings", "Builder"),
-		jen.Id("firstSqlBuilder").Dot("WriteString").Call(jen.Lit("update ")),
-		jen.Id("firstSqlBuilder").Dot("WriteString").Call(jen.Lit("<table>")),
-		jen.Id("firstSqlBuilder").Dot("WriteString").Call(jen.Lit("set <l_key> = <l_key> + 2 ")),
-		jen.Id("firstSqlBuilder").Dot("WriteString").Call(jen.Lit("where ")),
-		jen.Id("firstSqlBuilder").Dot("WriteString").Call(jen.Lit("<l_key> > ? and")),
-		jen.Id("firstSqlBuilder").Dot("WriteString").Call(jen.Lit("<tn_key> = ?")),
-		jen.Id("firstSqlBuilder").Dot("WriteString").Call(jen.Lit("<deleted_cond>")),
-		jen.Id("firstSqlBuilder").Dot("WriteString").Call(jen.Lit(";")),
-		jen.Var().Id("secondSqlBuilder").Qual("strings", "Builder"),
-		jen.Id("secondSqlBuilder").Dot("WriteString").Call(jen.Lit("update ")),
-		jen.Id("secondSqlBuilder").Dot("WriteString").Call(jen.Lit("<table>")),
-		jen.Id("secondSqlBuilder").Dot("WriteString").Call(jen.Lit("set <r_key> = <r_key> + 2 ")),
-		jen.Id("secondSqlBuilder").Dot("WriteString").Call(jen.Lit("where ")),
-		jen.Id("secondSqlBuilder").Dot("WriteString").Call(jen.Lit("<r_key> >= ? and")),
-		jen.Id("secondSqlBuilder").Dot("WriteString").Call(jen.Lit("<tn_key> = ?")),
-		jen.Id("secondSqlBuilder").Dot("WriteString").Call(jen.Lit("<deleted_cond>")),
-		jen.Id("secondSqlBuilder").Dot("WriteString").Call(jen.Lit(";")),
-		jen.Id("errorHandler").Op(":=").Qual("metis/util", "ErrToLogAndPanic").Call(jen.Id("recorder")),
+		jen.Id("recorder").Op(":=").Add(useLogger("AccessLogger")).Call(jen.Id("ag").Dot("ctx")),
+		jen.Id("errorHandler").Op(":=").Add(useUtil("ErrToLogAndPanic")).Call(jen.Id("recorder")),
 		jen.List(
 			jen.Id("stmt"),
 			jen.Id("err"),
-		).Op(":=").Id("tx").Dot("Prepare").Call(jen.Id("firstSqlBuilder").Dot("String").Call()),
-		jen.Defer().Qual("metis/util", "DeferClose").Call(
+		).Op(":=").Id("tx").Dot("Prepare").Call(jen.Lit(sql0)),
+		jen.Defer().Add(useUtil("DeferClose")).Call(
 			jen.Id("stmt"),
 			jen.Id("errorHandler"),
 		),
@@ -741,8 +629,8 @@ func genFuncinternalUpdateNodeInOnlyPrecursorWhenInsert() jen.Code {
 		jen.List(
 			jen.Id("stmt"),
 			jen.Id("err"),
-		).Op("=").Id("tx").Dot("Prepare").Call(jen.Id("secondSqlBuilder").Dot("String").Call()),
-		jen.Defer().Qual("metis/util", "DeferClose").Call(
+		).Op("=").Id("tx").Dot("Prepare").Call(jen.Lit(sql1)),
+		jen.Defer().Add(useUtil("DeferClose")).Call(
 			jen.Id("stmt"),
 			jen.Id("errorHandler"),
 		),
@@ -764,19 +652,20 @@ func genFuncinternalUpdateNodeInOnlyPrecursorWhenInsert() jen.Code {
 	)
 }
 
-func genFuncinternalInsertWithFunc() jen.Code {
-	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("internalInsertWithFunc").Params(
-		jen.Id("tx").Op("*").Qual(
-			"database/sql", "Tx",
-		),
+func genFuncInternalInsertWithFunc(table string, columns []Column) jen.Code {
+	camel := strcase.ToCamel(table)
+	lowerCamel := strcase.ToLowerCamel(table)
+
+	return jen.Line().Comment("internalInsertWithFunc 根据函数进行插入").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("internalInsertWithFunc").Params(
+		jen.Id("tx").Op("*").Add(useSql("Tx")),
 		jen.Id(lowerCamel).Op("*").Add(useEntity(camel)),
 		jen.List(
 			jen.Id("pid"),
 			jen.Id("sid"),
 		).Id("int64"),
-		jen.Id("fn").Params(jen.Id("f").Id("any")).Params(jen.Id("bool")),
+		genDeclAnonymousFunc(),
 	).Params(jen.Id("int64")).Block(
-		jen.Id("recorder").Op(":=").Id("logger").Dot("AccessLogger").Call(jen.Id("ag").Dot("ctx")),
+		jen.Id("recorder").Op(":=").Add(useLogger("AccessLogger")).Call(jen.Id("ag").Dot("ctx")),
 		jen.Id("recorder").Dot("Sugar").Call().Dot("Infof").Call(
 			jen.Lit("插入节点, 前驱: %+v, 后继: %+v, 节点: %+v"),
 			jen.Id("pid"),
@@ -845,14 +734,20 @@ func genFuncinternalInsertWithFunc() jen.Code {
 	)
 }
 
-func genFuncinternalDirectDelete() jen.Code {
-	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("internalDirectDelete").Params(
-		jen.Id("tx").Op("*").Qual(
-			"database/sql", "Tx",
-		),
+func genFuncInternalDirectDelete(table string, columns []Column) jen.Code {
+
+	var sql0 string
+	if hasColumn(d_key, columns) {
+		sql0 = fmt.Sprintf("UPDATE %s SET %s = 1 WHERE %s >= ? AND %s <= ? AND %s = ? AND %s;", table, d_key, l_key, r_key, tn_key, ud_cond_key)
+	} else {
+		sql0 = fmt.Sprintf("DELETE FROM %s WHERE %s >= ? AND %s <= ? AND %s = ?;", table, l_key, r_key, tn_key)
+	}
+
+	return jen.Line().Comment("internalDirectDelete 直接删除(逻辑 or 物理)").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("internalDirectDelete").Params(
+		jen.Id("tx").Op("*").Add(useSql("Tx")),
 		jen.Id("id").Id("int64"),
 	).Params(jen.Id("bool")).Block(
-		jen.Id("recorder").Op(":=").Id("logger").Dot("AccessLogger").Call(jen.Id("ag").Dot("ctx")),
+		jen.Id("recorder").Op(":=").Add(useLogger("AccessLogger")).Call(jen.Id("ag").Dot("ctx")),
 		jen.Id("nodes").Op(":=").Id("ag").Dot("internalSelectNodeByIDs").Call(
 			jen.Id("tx"),
 			jen.Id("nil"),
@@ -870,22 +765,12 @@ func genFuncinternalDirectDelete() jen.Code {
 				jen.Id("right"),
 				jen.Id("treeNo"),
 			),
-			jen.Var().Id("sqlBuilder").Qual("strings", "Builder"),
-			jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("update ")),
-			jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<table>")),
-			jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("set <d_key> = 1 ")),
-			jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("where ")),
-			jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<l_key> >= ? and")),
-			jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<r_key> <= ? and")),
-			jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<tn_key> = ?")),
-			jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<deleted_cond>")),
-			jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit(";")),
-			jen.Id("errorHandler").Op(":=").Qual("metis/util", "ErrToLogAndPanic").Call(jen.Id("recorder")),
+			jen.Id("errorHandler").Op(":=").Add(useUtil("ErrToLogAndPanic")).Call(jen.Id("recorder")),
 			jen.List(
 				jen.Id("stmt"),
 				jen.Id("err"),
-			).Op(":=").Id("tx").Dot("Prepare").Call(jen.Id("sqlBuilder").Dot("String").Call()),
-			jen.Defer().Qual("metis/util", "DeferClose").Call(
+			).Op(":=").Id("tx").Dot("Prepare").Call(jen.Lit(sql0)),
+			jen.Defer().Add(useUtil("DeferClose")).Call(
 				jen.Id("stmt"),
 				jen.Id("errorHandler"),
 			),
@@ -912,42 +797,31 @@ func genFuncinternalDirectDelete() jen.Code {
 	)
 }
 
-func genFuncinternalUpdateNodeWhenDelete() jen.Code {
-	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("internalUpdateNodeWhenDelete").Params(
-		jen.Id("tx").Op("*").Qual(
-			"database/sql", "Tx",
-		),
+func genFuncInternalUpdateNodeWhenDelete(table string, columns []Column) jen.Code {
+	var sql0, sql1 string
+	if hasColumn(d_key, columns) {
+		sql0 = fmt.Sprintf("UPDATE %s SET %s = %s - ? WHERE %s > ? AND %s = ? AND %s;", table, l_key, l_key, l_key, tn_key, ud_cond_key)
+		sql1 = fmt.Sprintf("UPDATE %s SET %s = %s - ? WHERE %s > ? AND %s = ? AND %s;", table, r_key, r_key, r_key, tn_key, ud_cond_key)
+	} else {
+		sql0 = fmt.Sprintf("UPDATE %s SET %s = %s - ? WHERE %s > ? AND %s = ?;", table, l_key, l_key, l_key, tn_key)
+		sql1 = fmt.Sprintf("UPDATE %s SET %s = %s - ? WHERE %s > ? AND %s = ?;", table, r_key, r_key, r_key, tn_key)
+	}
+
+	return jen.Line().Comment("internalUpdateNodeWhenDelete 删除时更新节点").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("internalUpdateNodeWhenDelete").Params(
+		jen.Id("tx").Op("*").Add(useSql("Tx")),
 		jen.List(
 			jen.Id("delta"),
 			jen.Id("right"),
 			jen.Id("treeNo"),
 		).Id("int"),
 	).Block(
-		jen.Id("recorder").Op(":=").Id("logger").Dot("AccessLogger").Call(jen.Id("ag").Dot("ctx")),
-		jen.Var().Id("firstSqlBuilder").Qual("strings", "Builder"),
-		jen.Id("firstSqlBuilder").Dot("WriteString").Call(jen.Lit("update ")),
-		jen.Id("firstSqlBuilder").Dot("WriteString").Call(jen.Lit("<table>")),
-		jen.Id("firstSqlBuilder").Dot("WriteString").Call(jen.Lit("set <l_key> = <l_key> - ? ")),
-		jen.Id("firstSqlBuilder").Dot("WriteString").Call(jen.Lit("where ")),
-		jen.Id("firstSqlBuilder").Dot("WriteString").Call(jen.Lit("<l_key> > ? and")),
-		jen.Id("firstSqlBuilder").Dot("WriteString").Call(jen.Lit("<tn_key> = ?")),
-		jen.Id("firstSqlBuilder").Dot("WriteString").Call(jen.Lit("<deleted_cond>")),
-		jen.Id("firstSqlBuilder").Dot("WriteString").Call(jen.Lit(";")),
-		jen.Var().Id("secondSqlBuilder").Qual("strings", "Builder"),
-		jen.Id("secondSqlBuilder").Dot("WriteString").Call(jen.Lit("update ")),
-		jen.Id("secondSqlBuilder").Dot("WriteString").Call(jen.Lit("<table>")),
-		jen.Id("secondSqlBuilder").Dot("WriteString").Call(jen.Lit("set <r_key> = <r_key> - ? ")),
-		jen.Id("secondSqlBuilder").Dot("WriteString").Call(jen.Lit("where ")),
-		jen.Id("secondSqlBuilder").Dot("WriteString").Call(jen.Lit("<r_key> > ? and")),
-		jen.Id("secondSqlBuilder").Dot("WriteString").Call(jen.Lit("<tn_key> = ?")),
-		jen.Id("secondSqlBuilder").Dot("WriteString").Call(jen.Lit("<deleted_cond>")),
-		jen.Id("secondSqlBuilder").Dot("WriteString").Call(jen.Lit(";")),
-		jen.Id("errorHandler").Op(":=").Qual("metis/util", "ErrToLogAndPanic").Call(jen.Id("recorder")),
+		jen.Id("recorder").Op(":=").Add(useLogger("AccessLogger")).Call(jen.Id("ag").Dot("ctx")),
+		jen.Id("errorHandler").Op(":=").Add(useUtil("ErrToLogAndPanic")).Call(jen.Id("recorder")),
 		jen.List(
 			jen.Id("stmt"),
 			jen.Id("err"),
-		).Op(":=").Id("tx").Dot("Prepare").Call(jen.Id("firstSqlBuilder").Dot("String").Call()),
-		jen.Defer().Qual("metis/util", "DeferClose").Call(
+		).Op(":=").Id("tx").Dot("Prepare").Call(jen.Lit(sql0)),
+		jen.Defer().Add(useUtil("DeferClose")).Call(
 			jen.Id("stmt"),
 			jen.Id("errorHandler"),
 		),
@@ -970,8 +844,8 @@ func genFuncinternalUpdateNodeWhenDelete() jen.Code {
 		jen.List(
 			jen.Id("stmt"),
 			jen.Id("err"),
-		).Op("=").Id("tx").Dot("Prepare").Call(jen.Id("secondSqlBuilder").Dot("String").Call()),
-		jen.Defer().Qual("metis/util", "DeferClose").Call(
+		).Op("=").Id("tx").Dot("Prepare").Call(jen.Lit(sql1)),
+		jen.Defer().Add(useUtil("DeferClose")).Call(
 			jen.Id("stmt"),
 			jen.Id("errorHandler"),
 		),
@@ -994,43 +868,51 @@ func genFuncinternalUpdateNodeWhenDelete() jen.Code {
 	)
 }
 
-func genFuncgetDbCtx() jen.Code {
-	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("getDbCtx").Params().Params(
-		jen.Qual(
-			"context", "Context",
-		),
-	).Block(
-		jen.Return().Qual("context", "WithValue").Call(
-			jen.Qual("context", "Background").Call(),
-			jen.Id("constant").Dot("TraceIdKey"),
-			jen.Id("ag").Dot("ctx").Dot("GetString").Call(jen.Id("constant").Dot("TraceIdKey")),
-		),
-	)
-}
+func genFuncSelectByID(table string, columns []Column) jen.Code {
+	if !hasColumn(p_key, columns) {
+		return jen.Null()
+	}
 
-func genFuncSelectByID() jen.Code {
-	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectByID").Params(jen.Id("id").Id("int64")).Params(jen.Op("*").Add(useEntity(camel))).Block(
+	camel := strcase.ToCamel(table)
+	// lowerCamel := strcase.ToLowerCamel(table)
+
+	return jen.Line().Comment("SelectByID 根据 ID 查询").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectByID").Params(jen.Id("id").Id("int64")).
+		Params(jen.Op("*").Add(useEntity(camel))).Block(
 		jen.Id("ds").Op(":=").Id("ag").Dot("BatchSelectByID").Call(jen.Index().Id("int64").Values(jen.Id("id"))),
 		jen.If(jen.Id("len").Call(jen.Id("ds")).Op("==").Lit(1)).Block(jen.Return().Id("ds").Index(jen.Lit(0))),
 		jen.Return().Id("nil"),
 	)
 }
 
-func genFuncSelectByIDs() jen.Code {
-	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectByIDs").Params(jen.Id("ids").Op("...").Id("int64")).Params(jen.Index().Op("*").Add(useEntity(camel))).Block(
+func genFuncSelectByIDs(table string, columns []Column) jen.Code {
+	if !hasColumn(p_key, columns) {
+		return jen.Null()
+	}
+
+	camel := strcase.ToCamel(table)
+	// lowerCamel := strcase.ToLowerCamel(table)
+	return jen.Line().Comment("SelectByIDs 根据 ID 列表查询").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectByIDs").Params(jen.Id("ids").Op("...").Id("int64")).
+		Params(jen.Index().Op("*").Add(useEntity(camel))).Block(
 		jen.Id("ds").Op(":=").Id("ag").Dot("BatchSelectByID").Call(jen.Id("ids")),
 		jen.Return().Id("ds"),
 	)
 }
 
-func genFuncBatchSelectByID() jen.Code {
-	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("BatchSelectByID").Params(jen.Id("ids").Index().Id("int64")).Params(jen.Index().Op("*").Add(useEntity(camel))).Block(
-		jen.Id("recorder").Op(":=").Id("logger").Dot("AccessLogger").Call(jen.Id("ag").Dot("ctx")),
+func genFuncBatchSelectByID(table string, columns []Column) jen.Code {
+	if !hasColumn(p_key, columns) {
+		return jen.Null()
+	}
+
+	camel := strcase.ToCamel(table)
+	// lowerCamel := strcase.ToLowerCamel(table)
+	return jen.Line().Comment("BatchSelectByID 根据 ID 批量查询").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("BatchSelectByID").Params(jen.Id("ids").Index().Id("int64")).
+		Params(jen.Index().Op("*").Add(useEntity(camel))).Block(
+		jen.Id("recorder").Op(":=").Add(useLogger("AccessLogger")).Call(jen.Id("ag").Dot("ctx")),
 		jen.Id("recorder").Dot("Sugar").Call().Dot("Infof").Call(
 			jen.Lit("查询 ID 列表: %+v 的数据"),
 			jen.Id("ids"),
 		),
-		jen.Id("db").Op(":=").Qual("metis/database", "FetchDB").Call(),
+		jen.Id("db").Op(":=").Add(useDatabase("FetchDB")).Call(),
 		jen.Return().Id("ag").Dot("internalSelectNodeByIDs").Call(
 			jen.Id("nil"),
 			jen.Id("db"),
@@ -1039,29 +921,28 @@ func genFuncBatchSelectByID() jen.Code {
 	)
 }
 
-func genFuncSelectByName() jen.Code {
-	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectByName").Params(jen.Id("name").Id("string")).Params(jen.Index().Op("*").Add(useEntity(camel))).Block(
-		jen.Id("recorder").Op(":=").Id("logger").Dot("AccessLogger").Call(jen.Id("ag").Dot("ctx")),
+func genFuncSelectByName(table string, columns []Column) jen.Code {
+	camel := strcase.ToCamel(table)
+	// lowerCamel := strcase.ToLowerCamel(table)
+	var sql0 string
+	if hasColumn(d_key, columns) {
+		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s like ? AND %s;", allFields(columns), table, n_key, ud_cond_key)
+	} else {
+		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s like ?;", allFields(columns), table, n_key)
+	}
+	return jen.Line().Comment("SelectByName 根据名称查询").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectByName").Params(jen.Id("name").Id("string")).Params(jen.Index().Op("*").Add(useEntity(camel))).Block(
+		jen.Id("recorder").Op(":=").Add(useLogger("AccessLogger")).Call(jen.Id("ag").Dot("ctx")),
 		jen.Id("recorder").Dot("Sugar").Call().Dot("Infof").Call(
 			jen.Lit("查询 NAME: %+v 的数据"),
 			jen.Id("name"),
 		),
-		jen.Var().Id("sqlBuilder").Qual("strings", "Builder"),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("select ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Id("allFields").Call()),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("from <table> ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("where ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<name_key> ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("like ?")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<deleted_cond>")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit(";")),
-		jen.Id("db").Op(":=").Qual("metis/database", "FetchDB").Call(),
-		jen.Id("errorHandler").Op(":=").Qual("metis/util", "ErrToLogAndPanic").Call(jen.Id("recorder")),
+		jen.Id("db").Op(":=").Add(useDatabase("FetchDB")).Call(),
+		jen.Id("errorHandler").Op(":=").Add(useUtil("ErrToLogAndPanic")).Call(jen.Id("recorder")),
 		jen.List(
 			jen.Id("stmt"),
 			jen.Id("err"),
-		).Op(":=").Id("db").Dot("Prepare").Call(jen.Id("sqlBuilder").Dot("String").Call()),
-		jen.Defer().Qual("metis/util", "DeferClose").Call(
+		).Op(":=").Id("db").Dot("Prepare").Call(jen.Lit(sql0)),
+		jen.Defer().Add(useUtil("DeferClose")).Call(
 			jen.Id("stmt"),
 			jen.Id("errorHandler"),
 		),
@@ -1074,11 +955,11 @@ func genFuncSelectByName() jen.Code {
 			jen.Id("name"),
 		),
 		jen.Id("errorHandler").Call(jen.Id("err")),
-		jen.Defer().Qual("metis/util", "DeferClose").Call(
+		jen.Defer().Add(useUtil("DeferClose")).Call(
 			jen.Id("rows"),
 			jen.Id("errorHandler"),
 		),
-		jen.Id("ds").Op(":=").Qual("metis/util", "Rows").Call(
+		jen.Id("ds").Op(":=").Add(useUtil("Rows")).Call(
 			jen.Id("rows"),
 			jen.Id("mapperAll"),
 		),
@@ -1086,29 +967,28 @@ func genFuncSelectByName() jen.Code {
 	)
 }
 
-func genFuncSelectMaxLevel() jen.Code {
-	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectMaxLevel").Params(jen.Id("treeNo").Id("int")).Params(jen.Id("int")).Block(
-		jen.Id("recorder").Op(":=").Id("logger").Dot("AccessLogger").Call(jen.Id("ag").Dot("ctx")),
+func genFuncSelectMaxLevel(table string, columns []Column) jen.Code {
+	// camel := strcase.ToCamel(table)
+	// lowerCamel := strcase.ToLowerCamel(table)
+	var sql0 string
+	if hasColumn(d_key, columns) {
+		sql0 = fmt.Sprintf("SELECT MAX(%s) FROM %s WHERE %s = ? AND %s;", ll_key, table, tn_key, ud_cond_key)
+	} else {
+		sql0 = fmt.Sprintf("SELECT MAX(%s) FROM %s WHERE %s = ?;", ll_key, table, tn_key)
+	}
+	return jen.Line().Comment("SelectMaxLevel 查询最大层级").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectMaxLevel").Params(jen.Id("treeNo").Id("int")).Params(jen.Id("int")).Block(
+		jen.Id("recorder").Op(":=").Add(useLogger("AccessLogger")).Call(jen.Id("ag").Dot("ctx")),
 		jen.Id("recorder").Dot("Sugar").Call().Dot("Infof").Call(
 			jen.Lit("查询 TN: %+v 的最大层级"),
 			jen.Id("treeNo"),
 		),
-		jen.Var().Id("sqlBuilder").Qual("strings", "Builder"),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("select ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("max(<ll_key>)")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("from <table> ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("where ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<tn_key> ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("= ?")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<deleted_cond>")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit(";")),
-		jen.Id("db").Op(":=").Qual("metis/database", "FetchDB").Call(),
-		jen.Id("errorHandler").Op(":=").Qual("metis/util", "ErrToLogAndPanic").Call(jen.Id("recorder")),
+		jen.Id("db").Op(":=").Add(useDatabase("FetchDB")).Call(),
+		jen.Id("errorHandler").Op(":=").Add(useUtil("ErrToLogAndPanic")).Call(jen.Id("recorder")),
 		jen.List(
 			jen.Id("stmt"),
 			jen.Id("err"),
-		).Op(":=").Id("db").Dot("Prepare").Call(jen.Id("sqlBuilder").Dot("String").Call()),
-		jen.Defer().Qual("metis/util", "DeferClose").Call(
+		).Op(":=").Id("db").Dot("Prepare").Call(jen.Lit(sql0)),
+		jen.Defer().Add(useUtil("DeferClose")).Call(
 			jen.Id("stmt"),
 			jen.Id("errorHandler"),
 		),
@@ -1117,7 +997,7 @@ func genFuncSelectMaxLevel() jen.Code {
 			jen.Id("ag").Dot("getDbCtx").Call(),
 			jen.Id("treeNo"),
 		),
-		jen.Id("ds").Op(":=").Qual("metis/util", "Row").Call(
+		jen.Id("ds").Op(":=").Add(useUtil("Row")).Call(
 			jen.Id("row"),
 			jen.Id("mapperNumeric").Index(jen.Id("int")),
 		),
@@ -1125,29 +1005,28 @@ func genFuncSelectMaxLevel() jen.Code {
 	)
 }
 
-func genFuncSelectMaxRight() jen.Code {
-	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectMaxRight").Params(jen.Id("treeNo").Id("int")).Params(jen.Id("int")).Block(
-		jen.Id("recorder").Op(":=").Id("logger").Dot("AccessLogger").Call(jen.Id("ag").Dot("ctx")),
+func genFuncSelectMaxRight(table string, columns []Column) jen.Code {
+	// camel := strcase.ToCamel(table)
+	// lowerCamel := strcase.ToLowerCamel(table)
+	var sql0 string
+	if hasColumn(d_key, columns) {
+		sql0 = fmt.Sprintf("SELECT MAX(%s) FROM %s WHERE %s = ? AND %s;", r_key, table, tn_key, ud_cond_key)
+	} else {
+		sql0 = fmt.Sprintf("SELECT MAX(%s) FROM %s WHERE %s = ?;", r_key, table, tn_key)
+	}
+	return jen.Line().Comment("SelectMaxRight 查询最大右值").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectMaxRight").Params(jen.Id("treeNo").Id("int")).Params(jen.Id("int")).Block(
+		jen.Id("recorder").Op(":=").Add(useLogger("AccessLogger")).Call(jen.Id("ag").Dot("ctx")),
 		jen.Id("recorder").Dot("Sugar").Call().Dot("Infof").Call(
 			jen.Lit("查询 TN: %+v 的最大层级"),
 			jen.Id("treeNo"),
 		),
-		jen.Var().Id("sqlBuilder").Qual("strings", "Builder"),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("select ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("max(<r_key>)")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("from <table> ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("where ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<tn_key> ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("= ?")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<deleted_cond>")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit(";")),
-		jen.Id("db").Op(":=").Qual("metis/database", "FetchDB").Call(),
-		jen.Id("errorHandler").Op(":=").Qual("metis/util", "ErrToLogAndPanic").Call(jen.Id("recorder")),
+		jen.Id("db").Op(":=").Add(useDatabase("FetchDB")).Call(),
+		jen.Id("errorHandler").Op(":=").Add(useUtil("ErrToLogAndPanic")).Call(jen.Id("recorder")),
 		jen.List(
 			jen.Id("stmt"),
 			jen.Id("err"),
-		).Op(":=").Id("db").Dot("Prepare").Call(jen.Id("sqlBuilder").Dot("String").Call()),
-		jen.Defer().Qual("metis/util", "DeferClose").Call(
+		).Op(":=").Id("db").Dot("Prepare").Call(jen.Lit(sql0)),
+		jen.Defer().Add(useUtil("DeferClose")).Call(
 			jen.Id("stmt"),
 			jen.Id("errorHandler"),
 		),
@@ -1156,7 +1035,7 @@ func genFuncSelectMaxRight() jen.Code {
 			jen.Id("ag").Dot("getDbCtx").Call(),
 			jen.Id("treeNo"),
 		),
-		jen.Id("ds").Op(":=").Qual("metis/util", "Row").Call(
+		jen.Id("ds").Op(":=").Add(useUtil("Row")).Call(
 			jen.Id("row"),
 			jen.Id("mapperNumeric").Index(jen.Id("int")),
 		),
@@ -1164,29 +1043,28 @@ func genFuncSelectMaxRight() jen.Code {
 	)
 }
 
-func genFuncSelectMaxLeft() jen.Code {
-	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectMaxLeft").Params(jen.Id("treeNo").Id("int")).Params(jen.Id("int")).Block(
-		jen.Id("recorder").Op(":=").Id("logger").Dot("AccessLogger").Call(jen.Id("ag").Dot("ctx")),
+func genFuncSelectMaxLeft(table string, columns []Column) jen.Code {
+	// camel := strcase.ToCamel(table)
+	// lowerCamel := strcase.ToLowerCamel(table)
+	var sql0 string
+	if hasColumn(d_key, columns) {
+		sql0 = fmt.Sprintf("SELECT MAX(%s) FROM %s WHERE %s = ? AND %s;", l_key, table, tn_key, ud_cond_key)
+	} else {
+		sql0 = fmt.Sprintf("SELECT MAX(%s) FROM %s WHERE %s = ?;", l_key, table, tn_key)
+	}
+	return jen.Line().Comment("SelectMaxLeft 查询最大左值").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectMaxLeft").Params(jen.Id("treeNo").Id("int")).Params(jen.Id("int")).Block(
+		jen.Id("recorder").Op(":=").Add(useLogger("AccessLogger")).Call(jen.Id("ag").Dot("ctx")),
 		jen.Id("recorder").Dot("Sugar").Call().Dot("Infof").Call(
 			jen.Lit("查询 TN: %+v 的最大层级"),
 			jen.Id("treeNo"),
 		),
-		jen.Var().Id("sqlBuilder").Qual("strings", "Builder"),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("select ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("max(<l_key>)")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("from <table> ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("where ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<tn_key> ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("= ?")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<deleted_cond>")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit(";")),
-		jen.Id("db").Op(":=").Qual("metis/database", "FetchDB").Call(),
-		jen.Id("errorHandler").Op(":=").Qual("metis/util", "ErrToLogAndPanic").Call(jen.Id("recorder")),
+		jen.Id("db").Op(":=").Add(useDatabase("FetchDB")).Call(),
+		jen.Id("errorHandler").Op(":=").Add(useUtil("ErrToLogAndPanic")).Call(jen.Id("recorder")),
 		jen.List(
 			jen.Id("stmt"),
 			jen.Id("err"),
-		).Op(":=").Id("db").Dot("Prepare").Call(jen.Id("sqlBuilder").Dot("String").Call()),
-		jen.Defer().Qual("metis/util", "DeferClose").Call(
+		).Op(":=").Id("db").Dot("Prepare").Call(jen.Lit(sql0)),
+		jen.Defer().Add(useUtil("DeferClose")).Call(
 			jen.Id("stmt"),
 			jen.Id("errorHandler"),
 		),
@@ -1195,7 +1073,7 @@ func genFuncSelectMaxLeft() jen.Code {
 			jen.Id("ag").Dot("getDbCtx").Call(),
 			jen.Id("treeNo"),
 		),
-		jen.Id("ds").Op(":=").Qual("metis/util", "Row").Call(
+		jen.Id("ds").Op(":=").Add(useUtil("Row")).Call(
 			jen.Id("row"),
 			jen.Id("mapperNumeric").Index(jen.Id("int")),
 		),
@@ -1203,25 +1081,25 @@ func genFuncSelectMaxLeft() jen.Code {
 	)
 }
 
-func genFuncSelectMaxTreeNo() jen.Code {
-	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectMaxTreeNo").Params().Params(jen.Id("int")).Block(
-		jen.Id("recorder").Op(":=").Id("logger").Dot("AccessLogger").Call(jen.Id("ag").Dot("ctx")),
+func genFuncSelectMaxTreeNo(table string, columns []Column) jen.Code {
+	// camel := strcase.ToCamel(table)
+	// lowerCamel := strcase.ToLowerCamel(table)
+	var sql0 string
+	if hasColumn(d_key, columns) {
+		sql0 = fmt.Sprintf("SELECT MAX(%s) FROM %s WHERE %s;", tn_key, table, ud_cond_key)
+	} else {
+		sql0 = fmt.Sprintf("SELECT MAX(%s) FROM %s;", tn_key, table)
+	}
+
+	return jen.Line().Comment("SelectMaxTreeNo 查询最大树号").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectMaxTreeNo").Params().Params(jen.Id("int")).Block(
+		jen.Id("recorder").Op(":=").Add(useLogger("AccessLogger")).Call(jen.Id("ag").Dot("ctx")),
 		jen.Id("recorder").Dot("Info").Call(jen.Lit("查询最大TN")),
-		jen.Var().Id("sqlBuilder").Qual("strings", "Builder"),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("select ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("max(<tn_key>)")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("from <table> ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("where ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<tn_key> ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("= ?")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<deleted_cond>")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit(";")),
-		jen.Id("db").Op(":=").Qual("metis/database", "FetchDB").Call(),
+		jen.Id("db").Op(":=").Add(useDatabase("FetchDB")).Call(),
 		jen.Id("row").Op(":=").Id("db").Dot("QueryRowContext").Call(
 			jen.Id("ag").Dot("getDbCtx").Call(),
-			jen.Id("sqlBuilder").Dot("String").Call(),
+			jen.Lit(sql0),
 		),
-		jen.Id("ds").Op(":=").Qual("metis/util", "Row").Call(
+		jen.Id("ds").Op(":=").Add(useUtil("Row")).Call(
 			jen.Id("row"),
 			jen.Id("mapperNumeric").Index(jen.Id("int")),
 		),
@@ -1229,31 +1107,30 @@ func genFuncSelectMaxTreeNo() jen.Code {
 	)
 }
 
-func genFuncSelectAllPosterity() jen.Code {
-	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectAllPosterity").Params(jen.Id("id").Id("int64")).Params(jen.Index().Op("*").Add(useEntity(camel))).Block(
-		jen.Id("recorder").Op(":=").Id("logger").Dot("AccessLogger").Call(jen.Id("ag").Dot("ctx")),
+func genFuncSelectAllPosterity(table string, columns []Column) jen.Code {
+	camel := strcase.ToCamel(table)
+	// lowerCamel := strcase.ToLowerCamel(table)
+	var sql0 string
+	if hasColumn(d_key, columns) {
+		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s > ? AND %s < ? AND %s = ? AND %s;", allFields(columns), table, l_key, r_key, tn_key, ud_cond_key)
+	} else {
+		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s > ? AND %s < ? AND %s = ?;", allFields(columns), table, l_key, r_key, tn_key)
+	}
+	return jen.Line().Comment("SelectAllPosterity 查询所有子代").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectAllPosterity").Params(jen.Id("id").Id("int64")).Params(jen.Index().Op("*").Add(useEntity(camel))).Block(
+		jen.Id("recorder").Op(":=").Add(useLogger("AccessLogger")).Call(jen.Id("ag").Dot("ctx")),
 		jen.Id("recorder").Dot("Sugar").Call().Dot("Infof").Call(
 			jen.Lit("查询 ID: %+v 的所有子代(含自身)数据"),
 			jen.Id("id"),
 		),
-		jen.Id("treeInfoSql").Op(":=").Id("treeFields").Call(),
-		jen.Var().Id("sqlBuilder").Qual("strings", "Builder"),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("select ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Id("allFields").Call()),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("from <table> ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("where ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<l_key> > ? and ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<r_key> < ? and")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<tn_key> = ?")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<deleted_cond>")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit(";")),
-		jen.Id("errorHandler").Op(":=").Qual("metis/util", "ErrToLogAndPanic").Call(jen.Id("recorder")),
-		jen.Id("db").Op(":=").Qual("metis/database", "FetchDB").Call(),
+		jen.Comment("recorder.Warn(\"不建议查询全部子代, 如果树比较大, 数据量将会非常大\")"),
+		jen.Id("treeInfoSql").Op(":=").Id("treeInfoSelectSql").Call(),
+		jen.Id("errorHandler").Op(":=").Add(useUtil("ErrToLogAndPanic")).Call(jen.Id("recorder")),
+		jen.Id("db").Op(":=").Add(useDatabase("FetchDB")).Call(),
 		jen.List(
 			jen.Id("tx"),
 			jen.Id("err"),
 		).Op(":=").Id("db").Dot("Begin").Call(),
-		jen.Defer().Qual("metis/util", "HandleTx").Call(
+		jen.Defer().Add(useUtil("HandleTx")).Call(
 			jen.Id("tx"),
 			jen.Id("errorHandler"),
 		),
@@ -1262,7 +1139,7 @@ func genFuncSelectAllPosterity() jen.Code {
 			jen.Id("firstStmt"),
 			jen.Id("err"),
 		).Op(":=").Id("tx").Dot("Prepare").Call(jen.Id("treeInfoSql")),
-		jen.Defer().Qual("metis/util", "DeferClose").Call(
+		jen.Defer().Add(useUtil("DeferClose")).Call(
 			jen.Id("firstStmt"),
 			jen.Id("errorHandler"),
 		),
@@ -1271,15 +1148,15 @@ func genFuncSelectAllPosterity() jen.Code {
 			jen.Id("ag").Dot("getDbCtx").Call(),
 			jen.Id("id"),
 		),
-		jen.Id("currentNode").Op(":=").Qual("metis/util", "Row").Call(
+		jen.Id("currentNode").Op(":=").Add(useUtil("Row")).Call(
 			jen.Id("row"),
 			jen.Id("mapperAll"),
 		),
 		jen.List(
 			jen.Id("secondStmt"),
 			jen.Id("err"),
-		).Op(":=").Id("tx").Dot("Prepare").Call(jen.Id("sqlBuilder").Dot("String").Call()),
-		jen.Defer().Qual("metis/util", "DeferClose").Call(
+		).Op(":=").Id("tx").Dot("Prepare").Call(jen.Lit(sql0)),
+		jen.Defer().Add(useUtil("DeferClose")).Call(
 			jen.Id("secondStmt"),
 			jen.Id("errorHandler"),
 		),
@@ -1293,12 +1170,12 @@ func genFuncSelectAllPosterity() jen.Code {
 			jen.Op("*").Id("currentNode").Dot("Right"),
 			jen.Op("*").Id("currentNode").Dot("TreeNo"),
 		),
-		jen.Defer().Qual("metis/util", "DeferClose").Call(
+		jen.Defer().Add(useUtil("DeferClose")).Call(
 			jen.Id("rows"),
 			jen.Id("errorHandler"),
 		),
 		jen.Id("errorHandler").Call(jen.Id("err")),
-		jen.Id("ds").Op(":=").Qual("metis/util", "Rows").Call(
+		jen.Id("ds").Op(":=").Add(useUtil("Rows")).Call(
 			jen.Id("rows"),
 			jen.Id("mapperAll"),
 		),
@@ -1306,32 +1183,31 @@ func genFuncSelectAllPosterity() jen.Code {
 	)
 }
 
-func genFuncSelectDirectPosterity() jen.Code {
-	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectDirectPosterity").Params(jen.Id("id").Id("int64")).Params(jen.Index().Op("*").Add(useEntity(camel))).Block(
-		jen.Id("recorder").Op(":=").Id("logger").Dot("AccessLogger").Call(jen.Id("ag").Dot("ctx")),
+func genFuncSelectDirectPosterity(table string, columns []Column) jen.Code {
+	camel := strcase.ToCamel(table)
+	// lowerCamel := strcase.ToLowerCamel(table)
+
+	var sql0 string
+	if hasColumn(d_key, columns) {
+		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s = ? AND %s > ? AND %s < ? AND %s = ? AND %s;", allFields(columns), table, ll_key, l_key, r_key, tn_key, ud_cond_key)
+	} else {
+		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s = ? AND %s > ? AND %s < ? AND %s = ?;", allFields(columns), table, ll_key, l_key, r_key, tn_key)
+	}
+
+	return jen.Line().Comment("SelectDirectPosterity 查询直系子代").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectDirectPosterity").Params(jen.Id("id").Id("int64")).Params(jen.Index().Op("*").Add(useEntity(camel))).Block(
+		jen.Id("recorder").Op(":=").Add(useLogger("AccessLogger")).Call(jen.Id("ag").Dot("ctx")),
 		jen.Id("recorder").Dot("Sugar").Call().Dot("Infof").Call(
 			jen.Lit("查询 ID: %+v 的直系子代数据"),
 			jen.Id("id"),
 		),
-		jen.Id("treeInfoSql").Op(":=").Id("treeFields").Call(),
-		jen.Var().Id("sqlBuilder").Qual("strings", "Builder"),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("select ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Id("allFields").Call()),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("from <table> ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("where ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<ll_key> = ? and ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<l_key> > ? and ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<r_key> < ? and")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<tn_key> = ?")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<deleted_cond>")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit(";")),
-		jen.Id("errorHandler").Op(":=").Qual("metis/util", "ErrToLogAndPanic").Call(jen.Id("recorder")),
-		jen.Id("db").Op(":=").Qual("metis/database", "FetchDB").Call(),
+		jen.Id("treeInfoSql").Op(":=").Id("treeInfoSelectSql").Call(),
+		jen.Id("errorHandler").Op(":=").Add(useUtil("ErrToLogAndPanic")).Call(jen.Id("recorder")),
+		jen.Id("db").Op(":=").Add(useDatabase("FetchDB")).Call(),
 		jen.List(
 			jen.Id("tx"),
 			jen.Id("err"),
 		).Op(":=").Id("db").Dot("Begin").Call(),
-		jen.Defer().Qual("metis/util", "HandleTx").Call(
+		jen.Defer().Add(useUtil("HandleTx")).Call(
 			jen.Id("tx"),
 			jen.Id("errorHandler"),
 		),
@@ -1340,7 +1216,7 @@ func genFuncSelectDirectPosterity() jen.Code {
 			jen.Id("firstStmt"),
 			jen.Id("err"),
 		).Op(":=").Id("tx").Dot("Prepare").Call(jen.Id("treeInfoSql")),
-		jen.Defer().Qual("metis/util", "DeferClose").Call(
+		jen.Defer().Add(useUtil("DeferClose")).Call(
 			jen.Id("firstStmt"),
 			jen.Id("errorHandler"),
 		),
@@ -1349,15 +1225,15 @@ func genFuncSelectDirectPosterity() jen.Code {
 			jen.Id("ag").Dot("getDbCtx").Call(),
 			jen.Id("id"),
 		),
-		jen.Id("currentNode").Op(":=").Qual("metis/util", "Row").Call(
+		jen.Id("currentNode").Op(":=").Add(useUtil("Row")).Call(
 			jen.Id("row"),
 			jen.Id("mapperAll"),
 		),
 		jen.List(
 			jen.Id("secondStmt"),
 			jen.Id("err"),
-		).Op(":=").Id("tx").Dot("Prepare").Call(jen.Id("sqlBuilder").Dot("String").Call()),
-		jen.Defer().Qual("metis/util", "DeferClose").Call(
+		).Op(":=").Id("tx").Dot("Prepare").Call(jen.Lit(sql0)),
+		jen.Defer().Add(useUtil("DeferClose")).Call(
 			jen.Id("secondStmt"),
 			jen.Id("errorHandler"),
 		),
@@ -1373,11 +1249,11 @@ func genFuncSelectDirectPosterity() jen.Code {
 			jen.Op("*").Id("currentNode").Dot("TreeNo"),
 		),
 		jen.Id("errorHandler").Call(jen.Id("err")),
-		jen.Defer().Qual("metis/util", "DeferClose").Call(
+		jen.Defer().Add(useUtil("DeferClose")).Call(
 			jen.Id("rows"),
 			jen.Id("errorHandler"),
 		),
-		jen.Id("ds").Op(":=").Qual("metis/util", "Rows").Call(
+		jen.Id("ds").Op(":=").Add(useUtil("Rows")).Call(
 			jen.Id("rows"),
 			jen.Id("mapperAll"),
 		),
@@ -1385,31 +1261,31 @@ func genFuncSelectDirectPosterity() jen.Code {
 	)
 }
 
-func genFuncSelectBrother() jen.Code {
-	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectBrother").Params(jen.Id("id").Id("int64")).Params(jen.Index().Op("*").Add(useEntity(camel))).Block(
-		jen.Id("recorder").Op(":=").Id("logger").Dot("AccessLogger").Call(jen.Id("ag").Dot("ctx")),
+func genFuncSelectBrother(table string, columns []Column) jen.Code {
+	camel := strcase.ToCamel(table)
+	// lowerCamel := strcase.ToLowerCamel(table)
+
+	var sql0 string
+	if hasColumn(d_key, columns) {
+		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s = ? AND %s = ? AND %s != ? AND %s;", allFields(columns), table, ll_key, tn_key, p_key, ud_cond_key)
+	} else {
+		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s = ? AND %s = ? AND %s != ?;", allFields(columns), table, ll_key, tn_key, p_key)
+	}
+
+	return jen.Line().Comment("SelectBrother 查询兄弟(不含自身)").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectBrother").Params(jen.Id("id").Id("int64")).Params(jen.Index().Op("*").Add(useEntity(camel))).Block(
+		jen.Id("recorder").Op(":=").Add(useLogger("AccessLogger")).Call(jen.Id("ag").Dot("ctx")),
 		jen.Id("recorder").Dot("Sugar").Call().Dot("Infof").Call(
 			jen.Lit("查询 ID: %+v 的兄弟数据"),
 			jen.Id("id"),
 		),
-		jen.Id("treeInfoSql").Op(":=").Id("treeFields").Call(),
-		jen.Var().Id("sqlBuilder").Qual("strings", "Builder"),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("select ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Id("allFields").Call()),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("from <table> ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("where ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<ll_key> = ? and ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<tn_key> = ? and ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<p_key> != ?")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<deleted_cond>")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit(";")),
-		jen.Id("errorHandler").Op(":=").Qual("metis/util", "ErrToLogAndPanic").Call(jen.Id("recorder")),
-		jen.Id("db").Op(":=").Qual("metis/database", "FetchDB").Call(),
+		jen.Id("treeInfoSql").Op(":=").Id("treeInfoSelectSql").Call(),
+		jen.Id("errorHandler").Op(":=").Add(useUtil("ErrToLogAndPanic")).Call(jen.Id("recorder")),
+		jen.Id("db").Op(":=").Add(useDatabase("FetchDB")).Call(),
 		jen.List(
 			jen.Id("tx"),
 			jen.Id("err"),
 		).Op(":=").Id("db").Dot("Begin").Call(),
-		jen.Defer().Qual("metis/util", "HandleTx").Call(
+		jen.Defer().Add(useUtil("HandleTx")).Call(
 			jen.Id("tx"),
 			jen.Id("errorHandler"),
 		),
@@ -1418,7 +1294,7 @@ func genFuncSelectBrother() jen.Code {
 			jen.Id("firstStmt"),
 			jen.Id("err"),
 		).Op(":=").Id("tx").Dot("Prepare").Call(jen.Id("treeInfoSql")),
-		jen.Defer().Qual("metis/util", "DeferClose").Call(
+		jen.Defer().Add(useUtil("DeferClose")).Call(
 			jen.Id("firstStmt"),
 			jen.Id("errorHandler"),
 		),
@@ -1427,15 +1303,15 @@ func genFuncSelectBrother() jen.Code {
 			jen.Id("ag").Dot("getDbCtx").Call(),
 			jen.Id("id"),
 		),
-		jen.Id("currentNode").Op(":=").Qual("metis/util", "Row").Call(
+		jen.Id("currentNode").Op(":=").Add(useUtil("Row")).Call(
 			jen.Id("row"),
 			jen.Id("mapperAll"),
 		),
 		jen.List(
 			jen.Id("secondStmt"),
 			jen.Id("err"),
-		).Op(":=").Id("tx").Dot("Prepare").Call(jen.Id("sqlBuilder").Dot("String").Call()),
-		jen.Defer().Qual("metis/util", "DeferClose").Call(
+		).Op(":=").Id("tx").Dot("Prepare").Call(jen.Lit(sql0)),
+		jen.Defer().Add(useUtil("DeferClose")).Call(
 			jen.Id("secondStmt"),
 			jen.Id("errorHandler"),
 		),
@@ -1449,12 +1325,12 @@ func genFuncSelectBrother() jen.Code {
 			jen.Op("*").Id("currentNode").Dot("TreeNo"),
 			jen.Id("id"),
 		),
-		jen.Defer().Qual("metis/util", "DeferClose").Call(
+		jen.Defer().Add(useUtil("DeferClose")).Call(
 			jen.Id("rows"),
 			jen.Id("errorHandler"),
 		),
 		jen.Id("errorHandler").Call(jen.Id("err")),
-		jen.Id("ds").Op(":=").Qual("metis/util", "Rows").Call(
+		jen.Id("ds").Op(":=").Add(useUtil("Rows")).Call(
 			jen.Id("rows"),
 			jen.Id("mapperAll"),
 		),
@@ -1462,30 +1338,31 @@ func genFuncSelectBrother() jen.Code {
 	)
 }
 
-func genFuncSelectBrotherAndSelf() jen.Code {
-	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectBrotherAndSelf").Params(jen.Id("id").Id("int64")).Params(jen.Index().Op("*").Add(useEntity(camel))).Block(
-		jen.Id("recorder").Op(":=").Id("logger").Dot("AccessLogger").Call(jen.Id("ag").Dot("ctx")),
+func genFuncSelectBrotherAndSelf(table string, columns []Column) jen.Code {
+	camel := strcase.ToCamel(table)
+	// lowerCamel := strcase.ToLowerCamel(table)
+
+	var sql0 string
+	if hasColumn(d_key, columns) {
+		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s = ? AND %s = ? AND %s;", allFields(columns), table, ll_key, tn_key, ud_cond_key)
+	} else {
+		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s = ? AND %s = ?;", allFields(columns), table, ll_key, tn_key)
+	}
+
+	return jen.Line().Comment("SelectBrotherAndSelf 查询兄弟和自身").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectBrotherAndSelf").Params(jen.Id("id").Id("int64")).Params(jen.Index().Op("*").Add(useEntity(camel))).Block(
+		jen.Id("recorder").Op(":=").Add(useLogger("AccessLogger")).Call(jen.Id("ag").Dot("ctx")),
 		jen.Id("recorder").Dot("Sugar").Call().Dot("Infof").Call(
 			jen.Lit("查询 ID: %+v 的兄弟以及自身数据"),
 			jen.Id("id"),
 		),
-		jen.Id("treeInfoSql").Op(":=").Id("treeFields").Call(),
-		jen.Var().Id("sqlBuilder").Qual("strings", "Builder"),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("select ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Id("allFields").Call()),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("from <table> ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("where ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<ll_key> = ? and ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<tn_key> = ?")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<deleted_cond>")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit(";")),
-		jen.Id("errorHandler").Op(":=").Qual("metis/util", "ErrToLogAndPanic").Call(jen.Id("recorder")),
-		jen.Id("db").Op(":=").Qual("metis/database", "FetchDB").Call(),
+		jen.Id("treeInfoSql").Op(":=").Id("treeInfoSelectSql").Call(),
+		jen.Id("errorHandler").Op(":=").Add(useUtil("ErrToLogAndPanic")).Call(jen.Id("recorder")),
+		jen.Id("db").Op(":=").Add(useDatabase("FetchDB")).Call(),
 		jen.List(
 			jen.Id("tx"),
 			jen.Id("err"),
 		).Op(":=").Id("db").Dot("Begin").Call(),
-		jen.Defer().Qual("metis/util", "HandleTx").Call(
+		jen.Defer().Add(useUtil("HandleTx")).Call(
 			jen.Id("tx"),
 			jen.Id("errorHandler"),
 		),
@@ -1494,7 +1371,7 @@ func genFuncSelectBrotherAndSelf() jen.Code {
 			jen.Id("firstStmt"),
 			jen.Id("err"),
 		).Op(":=").Id("tx").Dot("Prepare").Call(jen.Id("treeInfoSql")),
-		jen.Defer().Qual("metis/util", "DeferClose").Call(
+		jen.Defer().Add(useUtil("DeferClose")).Call(
 			jen.Id("firstStmt"),
 			jen.Id("errorHandler"),
 		),
@@ -1503,15 +1380,15 @@ func genFuncSelectBrotherAndSelf() jen.Code {
 			jen.Id("ag").Dot("getDbCtx").Call(),
 			jen.Id("id"),
 		),
-		jen.Id("currentNode").Op(":=").Qual("metis/util", "Row").Call(
+		jen.Id("currentNode").Op(":=").Add(useUtil("Row")).Call(
 			jen.Id("row"),
 			jen.Id("mapperAll"),
 		),
 		jen.List(
 			jen.Id("secondStmt"),
 			jen.Id("err"),
-		).Op(":=").Id("tx").Dot("Prepare").Call(jen.Id("sqlBuilder").Dot("String").Call()),
-		jen.Defer().Qual("metis/util", "DeferClose").Call(
+		).Op(":=").Id("tx").Dot("Prepare").Call(jen.Lit(sql0)),
+		jen.Defer().Add(useUtil("DeferClose")).Call(
 			jen.Id("secondStmt"),
 			jen.Id("errorHandler"),
 		),
@@ -1524,12 +1401,12 @@ func genFuncSelectBrotherAndSelf() jen.Code {
 			jen.Op("*").Id("currentNode").Dot("Level").Op("+").Lit(1),
 			jen.Op("*").Id("currentNode").Dot("TreeNo"),
 		),
-		jen.Defer().Qual("metis/util", "DeferClose").Call(
+		jen.Defer().Add(useUtil("DeferClose")).Call(
 			jen.Id("rows"),
 			jen.Id("errorHandler"),
 		),
 		jen.Id("errorHandler").Call(jen.Id("err")),
-		jen.Id("ds").Op(":=").Qual("metis/util", "Rows").Call(
+		jen.Id("ds").Op(":=").Add(useUtil("Rows")).Call(
 			jen.Id("rows"),
 			jen.Id("mapperAll"),
 		),
@@ -1537,31 +1414,31 @@ func genFuncSelectBrotherAndSelf() jen.Code {
 	)
 }
 
-func genFuncSelectAncestorChain() jen.Code {
-	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectAncestorChain").Params(jen.Id("id").Id("int64")).Params(jen.Index().Op("*").Add(useEntity(camel))).Block(
-		jen.Id("recorder").Op(":=").Id("logger").Dot("AccessLogger").Call(jen.Id("ag").Dot("ctx")),
+func genFuncSelectAncestorChain(table string, columns []Column) jen.Code {
+	camel := strcase.ToCamel(table)
+	// lowerCamel := strcase.ToLowerCamel(table)
+
+	var sql0 string
+	if hasColumn(d_key, columns) {
+		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s < ? AND %s > ? AND %s = ? AND %s;", allFields(columns), table, l_key, r_key, tn_key, ud_cond_key)
+	} else {
+		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s < ? AND %s > ? AND %s = ?;", allFields(columns), table, l_key, r_key, tn_key)
+	}
+
+	return jen.Line().Comment("SelectAncestorChain 查询祖链").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectAncestorChain").Params(jen.Id("id").Id("int64")).Params(jen.Index().Op("*").Add(useEntity(camel))).Block(
+		jen.Id("recorder").Op(":=").Add(useLogger("AccessLogger")).Call(jen.Id("ag").Dot("ctx")),
 		jen.Id("recorder").Dot("Sugar").Call().Dot("Infof").Call(
 			jen.Lit("查询 ID: %+v 的祖链数据"),
 			jen.Id("id"),
 		),
-		jen.Id("treeInfoSql").Op(":=").Id("treeFields").Call(),
-		jen.Var().Id("sqlBuilder").Qual("strings", "Builder"),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("select ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Id("allFields").Call()),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("from <table> ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("where ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<l_key> < ? and ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<r_key> > ? and ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<tn_key> = ?")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<deleted_cond>")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit(";")),
-		jen.Id("errorHandler").Op(":=").Qual("metis/util", "ErrToLogAndPanic").Call(jen.Id("recorder")),
-		jen.Id("db").Op(":=").Qual("metis/database", "FetchDB").Call(),
+		jen.Id("treeInfoSql").Op(":=").Id("treeInfoSelectSql").Call(),
+		jen.Id("errorHandler").Op(":=").Add(useUtil("ErrToLogAndPanic")).Call(jen.Id("recorder")),
+		jen.Id("db").Op(":=").Add(useDatabase("FetchDB")).Call(),
 		jen.List(
 			jen.Id("tx"),
 			jen.Id("err"),
 		).Op(":=").Id("db").Dot("Begin").Call(),
-		jen.Defer().Qual("metis/util", "HandleTx").Call(
+		jen.Defer().Add(useUtil("HandleTx")).Call(
 			jen.Id("tx"),
 			jen.Id("errorHandler"),
 		),
@@ -1570,7 +1447,7 @@ func genFuncSelectAncestorChain() jen.Code {
 			jen.Id("firstStmt"),
 			jen.Id("err"),
 		).Op(":=").Id("tx").Dot("Prepare").Call(jen.Id("treeInfoSql")),
-		jen.Defer().Qual("metis/util", "DeferClose").Call(
+		jen.Defer().Add(useUtil("DeferClose")).Call(
 			jen.Id("firstStmt"),
 			jen.Id("errorHandler"),
 		),
@@ -1579,15 +1456,15 @@ func genFuncSelectAncestorChain() jen.Code {
 			jen.Id("ag").Dot("getDbCtx").Call(),
 			jen.Id("id"),
 		),
-		jen.Id("currentNode").Op(":=").Qual("metis/util", "Row").Call(
+		jen.Id("currentNode").Op(":=").Add(useUtil("Row")).Call(
 			jen.Id("row"),
 			jen.Id("mapperAll"),
 		),
 		jen.List(
 			jen.Id("secondStmt"),
 			jen.Id("err"),
-		).Op(":=").Id("tx").Dot("Prepare").Call(jen.Id("sqlBuilder").Dot("String").Call()),
-		jen.Defer().Qual("metis/util", "DeferClose").Call(
+		).Op(":=").Id("tx").Dot("Prepare").Call(jen.Lit(sql0)),
+		jen.Defer().Add(useUtil("DeferClose")).Call(
 			jen.Id("secondStmt"),
 			jen.Id("errorHandler"),
 		),
@@ -1601,12 +1478,12 @@ func genFuncSelectAncestorChain() jen.Code {
 			jen.Op("*").Id("currentNode").Dot("Right"),
 			jen.Op("*").Id("currentNode").Dot("TreeNo"),
 		),
-		jen.Defer().Qual("metis/util", "DeferClose").Call(
+		jen.Defer().Add(useUtil("DeferClose")).Call(
 			jen.Id("rows"),
 			jen.Id("errorHandler"),
 		),
 		jen.Id("errorHandler").Call(jen.Id("err")),
-		jen.Id("ds").Op(":=").Qual("metis/util", "Rows").Call(
+		jen.Id("ds").Op(":=").Add(useUtil("Rows")).Call(
 			jen.Id("rows"),
 			jen.Id("mapperAll"),
 		),
@@ -1614,36 +1491,35 @@ func genFuncSelectAncestorChain() jen.Code {
 	)
 }
 
-func genFuncSelectAncestor() jen.Code {
-	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectAncestor").Params(
+func genFuncSelectAncestor(table string, columns []Column) jen.Code {
+	camel := strcase.ToCamel(table)
+	// lowerCamel := strcase.ToLowerCamel(table)
+
+	var sql0 string
+	if hasColumn(d_key, columns) {
+		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s < ? AND %s > ? AND %s = ? AND %s = ? AND %s;", allFields(columns), table, l_key, r_key, ll_key, tn_key, ud_cond_key)
+	} else {
+		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s < ? AND %s > ? AND %s = ? AND %s = ?;", allFields(columns), table, l_key, r_key, ll_key, tn_key)
+	}
+
+	return jen.Line().Comment("SelectAncestor 查询祖节点").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectAncestor").Params(
 		jen.Id("id").Id("int64"),
 		jen.Id("level").Id("int"),
 	).Params(jen.Op("*").Add(useEntity(camel))).Block(
-		jen.Id("recorder").Op(":=").Id("logger").Dot("AccessLogger").Call(jen.Id("ag").Dot("ctx")),
+		jen.Id("recorder").Op(":=").Add(useLogger("AccessLogger")).Call(jen.Id("ag").Dot("ctx")),
 		jen.Id("recorder").Dot("Sugar").Call().Dot("Infof").Call(
 			jen.Lit("查询 ID: %+v 的祖代(%+v)数据"),
 			jen.Id("id"),
 			jen.Id("level"),
 		),
-		jen.Id("treeInfoSql").Op(":=").Id("treeFields").Call(),
-		jen.Var().Id("sqlBuilder").Qual("strings", "Builder"),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("select ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Id("allFields").Call()),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("from <table> ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("where ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<l_key> < ? and ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<r_key> > ? and ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<ll_key> = ? and ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<tn_key> = ?")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<deleted_cond>")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit(";")),
-		jen.Id("errorHandler").Op(":=").Qual("metis/util", "ErrToLogAndPanic").Call(jen.Id("recorder")),
-		jen.Id("db").Op(":=").Qual("metis/database", "FetchDB").Call(),
+		jen.Id("treeInfoSql").Op(":=").Id("treeInfoSelectSql").Call(),
+		jen.Id("errorHandler").Op(":=").Add(useUtil("ErrToLogAndPanic")).Call(jen.Id("recorder")),
+		jen.Id("db").Op(":=").Add(useDatabase("FetchDB")).Call(),
 		jen.List(
 			jen.Id("tx"),
 			jen.Id("err"),
 		).Op(":=").Id("db").Dot("Begin").Call(),
-		jen.Defer().Qual("metis/util", "HandleTx").Call(
+		jen.Defer().Add(useUtil("HandleTx")).Call(
 			jen.Id("tx"),
 			jen.Id("errorHandler"),
 		),
@@ -1652,7 +1528,7 @@ func genFuncSelectAncestor() jen.Code {
 			jen.Id("firstStmt"),
 			jen.Id("err"),
 		).Op(":=").Id("tx").Dot("Prepare").Call(jen.Id("treeInfoSql")),
-		jen.Defer().Qual("metis/util", "DeferClose").Call(
+		jen.Defer().Add(useUtil("DeferClose")).Call(
 			jen.Id("firstStmt"),
 			jen.Id("errorHandler"),
 		),
@@ -1661,15 +1537,15 @@ func genFuncSelectAncestor() jen.Code {
 			jen.Id("ag").Dot("getDbCtx").Call(),
 			jen.Id("id"),
 		),
-		jen.Id("currentNode").Op(":=").Qual("metis/util", "Row").Call(
+		jen.Id("currentNode").Op(":=").Add(useUtil("Row")).Call(
 			jen.Id("row"),
 			jen.Id("mapperAll"),
 		),
 		jen.List(
 			jen.Id("secondStmt"),
 			jen.Id("err"),
-		).Op(":=").Id("tx").Dot("Prepare").Call(jen.Id("sqlBuilder").Dot("String").Call()),
-		jen.Defer().Qual("metis/util", "DeferClose").Call(
+		).Op(":=").Id("tx").Dot("Prepare").Call(jen.Lit(sql0)),
+		jen.Defer().Add(useUtil("DeferClose")).Call(
 			jen.Id("secondStmt"),
 			jen.Id("errorHandler"),
 		),
@@ -1681,7 +1557,7 @@ func genFuncSelectAncestor() jen.Code {
 			jen.Id("level"),
 			jen.Op("*").Id("currentNode").Dot("TreeNo"),
 		),
-		jen.Id("ds").Op(":=").Qual("metis/util", "Row").Call(
+		jen.Id("ds").Op(":=").Add(useUtil("Row")).Call(
 			jen.Id("row"),
 			jen.Id("mapperAll"),
 		),
@@ -1689,32 +1565,31 @@ func genFuncSelectAncestor() jen.Code {
 	)
 }
 
-func genFuncSelectParent() jen.Code {
-	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectParent").Params(jen.Id("id").Id("int64")).Params(jen.Op("*").Add(useEntity(camel))).Block(
-		jen.Id("recorder").Op(":=").Id("logger").Dot("AccessLogger").Call(jen.Id("ag").Dot("ctx")),
+func genFuncSelectParent(table string, columns []Column) jen.Code {
+	camel := strcase.ToCamel(table)
+	// lowerCamel := strcase.ToLowerCamel(table)
+
+	var sql0 string
+	if hasColumn(d_key, columns) {
+		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s < ? AND %s > ? AND %s = ? AND %s = ? AND %s;", allFields(columns), table, l_key, r_key, ll_key, tn_key, ud_cond_key)
+	} else {
+		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s < ? AND %s > ? AND %s = ? AND %s = ?;", allFields(columns), table, l_key, r_key, ll_key, tn_key)
+	}
+
+	return jen.Line().Comment("SelectParent 查询父节点").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectParent").Params(jen.Id("id").Id("int64")).Params(jen.Op("*").Add(useEntity(camel))).Block(
+		jen.Id("recorder").Op(":=").Add(useLogger("AccessLogger")).Call(jen.Id("ag").Dot("ctx")),
 		jen.Id("recorder").Dot("Sugar").Call().Dot("Infof").Call(
 			jen.Lit("查询 ID: %+v 的父节点数据"),
 			jen.Id("id"),
 		),
-		jen.Id("treeInfoSql").Op(":=").Id("treeFields").Call(),
-		jen.Var().Id("sqlBuilder").Qual("strings", "Builder"),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("select ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Id("allFields").Call()),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("from <table> ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("where ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<l_key> < ? and ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<r_key> > ? and ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<ll_key> = ? and ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<tn_key> = ?")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<deleted_cond>")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit(";")),
-		jen.Id("errorHandler").Op(":=").Qual("metis/util", "ErrToLogAndPanic").Call(jen.Id("recorder")),
-		jen.Id("db").Op(":=").Qual("metis/database", "FetchDB").Call(),
+		jen.Id("treeInfoSql").Op(":=").Id("treeInfoSelectSql").Call(),
+		jen.Id("errorHandler").Op(":=").Add(useUtil("ErrToLogAndPanic")).Call(jen.Id("recorder")),
+		jen.Id("db").Op(":=").Add(useDatabase("FetchDB")).Call(),
 		jen.List(
 			jen.Id("tx"),
 			jen.Id("err"),
 		).Op(":=").Id("db").Dot("Begin").Call(),
-		jen.Defer().Qual("metis/util", "HandleTx").Call(
+		jen.Defer().Add(useUtil("HandleTx")).Call(
 			jen.Id("tx"),
 			jen.Id("errorHandler"),
 		),
@@ -1723,7 +1598,7 @@ func genFuncSelectParent() jen.Code {
 			jen.Id("firstStmt"),
 			jen.Id("err"),
 		).Op(":=").Id("tx").Dot("Prepare").Call(jen.Id("treeInfoSql")),
-		jen.Defer().Qual("metis/util", "DeferClose").Call(
+		jen.Defer().Add(useUtil("DeferClose")).Call(
 			jen.Id("firstStmt"),
 			jen.Id("errorHandler"),
 		),
@@ -1732,15 +1607,15 @@ func genFuncSelectParent() jen.Code {
 			jen.Id("ag").Dot("getDbCtx").Call(),
 			jen.Id("id"),
 		),
-		jen.Id("currentNode").Op(":=").Qual("metis/util", "Row").Call(
+		jen.Id("currentNode").Op(":=").Add(useUtil("Row")).Call(
 			jen.Id("row"),
 			jen.Id("mapperAll"),
 		),
 		jen.List(
 			jen.Id("secondStmt"),
 			jen.Id("err"),
-		).Op(":=").Id("tx").Dot("Prepare").Call(jen.Id("sqlBuilder").Dot("String").Call()),
-		jen.Defer().Qual("metis/util", "DeferClose").Call(
+		).Op(":=").Id("tx").Dot("Prepare").Call(jen.Lit(sql0)),
+		jen.Defer().Add(useUtil("DeferClose")).Call(
 			jen.Id("secondStmt"),
 			jen.Id("errorHandler"),
 		),
@@ -1752,7 +1627,7 @@ func genFuncSelectParent() jen.Code {
 			jen.Op("*").Id("currentNode").Dot("Level").Op("-").Lit(1),
 			jen.Op("*").Id("currentNode").Dot("TreeNo"),
 		),
-		jen.Id("ds").Op(":=").Qual("metis/util", "Row").Call(
+		jen.Id("ds").Op(":=").Add(useUtil("Row")).Call(
 			jen.Id("row"),
 			jen.Id("mapperAll"),
 		),
@@ -1760,35 +1635,36 @@ func genFuncSelectParent() jen.Code {
 	)
 }
 
-func genFuncSelectByTreeNoAndLevel() jen.Code {
-	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectByTreeNoAndLevel").Params(
+func genFuncSelectByTreeNoAndLevel(table string, columns []Column) jen.Code {
+	camel := strcase.ToCamel(table)
+	// lowerCamel := strcase.ToLowerCamel(table)
+
+	var sql0 string
+	if hasColumn(d_key, columns) {
+		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s = ? AND %s = ? AND %s;", allFields(columns), table, ll_key, tn_key, ud_cond_key)
+	} else {
+		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s = ? AND %s = ?;", allFields(columns), table, ll_key, tn_key)
+	}
+
+	return jen.Line().Comment("SelectByTreeNoAndLevel 根据树号和层级查询").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectByTreeNoAndLevel").Params(
 		jen.List(
 			jen.Id("treeNo"),
 			jen.Id("level"),
 		).Id("int"),
 	).Params(jen.Index().Op("*").Add(useEntity(camel))).Block(
-		jen.Id("recorder").Op(":=").Id("logger").Dot("AccessLogger").Call(jen.Id("ag").Dot("ctx")),
+		jen.Id("recorder").Op(":=").Add(useLogger("AccessLogger")).Call(jen.Id("ag").Dot("ctx")),
 		jen.Id("recorder").Dot("Sugar").Call().Dot("Infof").Call(
 			jen.Lit("查询 TN: %+v LL: %+v 的同代数据"),
 			jen.Id("treeNo"),
 			jen.Id("level"),
 		),
-		jen.Var().Id("sqlBuilder").Qual("strings", "Builder"),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("select ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Id("allFields").Call()),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("from <table> ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("where ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<ll_key> = ? and")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<tn_key> = ?")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<deleted_cond>")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit(";")),
-		jen.Id("errorHandler").Op(":=").Qual("metis/util", "ErrToLogAndPanic").Call(jen.Id("recorder")),
-		jen.Id("db").Op(":=").Qual("metis/database", "FetchDB").Call(),
+		jen.Id("errorHandler").Op(":=").Add(useUtil("ErrToLogAndPanic")).Call(jen.Id("recorder")),
+		jen.Id("db").Op(":=").Add(useDatabase("FetchDB")).Call(),
 		jen.List(
 			jen.Id("stmt"),
 			jen.Id("err"),
-		).Op(":=").Id("db").Dot("Prepare").Call(jen.Id("sqlBuilder").Dot("String").Call()),
-		jen.Defer().Qual("metis/util", "DeferClose").Call(
+		).Op(":=").Id("db").Dot("Prepare").Call(jen.Lit(sql0)),
+		jen.Defer().Add(useUtil("DeferClose")).Call(
 			jen.Id("stmt"),
 			jen.Id("errorHandler"),
 		),
@@ -1801,12 +1677,12 @@ func genFuncSelectByTreeNoAndLevel() jen.Code {
 			jen.Id("treeNo"),
 			jen.Id("level"),
 		),
-		jen.Defer().Qual("metis/util", "DeferClose").Call(
+		jen.Defer().Add(useUtil("DeferClose")).Call(
 			jen.Id("rows"),
 			jen.Id("errorHandler"),
 		),
 		jen.Id("errorHandler").Call(jen.Id("err")),
-		jen.Id("ds").Op(":=").Qual("metis/util", "Rows").Call(
+		jen.Id("ds").Op(":=").Add(useUtil("Rows")).Call(
 			jen.Id("rows"),
 			jen.Id("mapperAll"),
 		),
@@ -1814,28 +1690,30 @@ func genFuncSelectByTreeNoAndLevel() jen.Code {
 	)
 }
 
-func genFuncSelectByLevel() jen.Code {
-	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectByLevel").Params(jen.Id("level").Id("int")).Params(jen.Index().Op("*").Add(useEntity(camel))).Block(
-		jen.Id("recorder").Op(":=").Id("logger").Dot("AccessLogger").Call(jen.Id("ag").Dot("ctx")),
+func genFuncSelectByLevel(table string, columns []Column) jen.Code {
+	camel := strcase.ToCamel(table)
+	// lowerCamel := strcase.ToLowerCamel(table)
+
+	var sql0 string
+	if hasColumn(d_key, columns) {
+		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s = ? AND %s;", allFields(columns), table, ll_key, ud_cond_key)
+	} else {
+		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s = ?;", allFields(columns), table, ll_key)
+	}
+
+	return jen.Line().Comment("SelectByLevel 根据层级查询").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectByLevel").Params(jen.Id("level").Id("int")).Params(jen.Index().Op("*").Add(useEntity(camel))).Block(
+		jen.Id("recorder").Op(":=").Add(useLogger("AccessLogger")).Call(jen.Id("ag").Dot("ctx")),
 		jen.Id("recorder").Dot("Sugar").Call().Dot("Infof").Call(
 			jen.Lit("查询 LL: %+v 的同代(跨树)数据"),
 			jen.Id("level"),
 		),
-		jen.Var().Id("sqlBuilder").Qual("strings", "Builder"),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("select ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Id("allFields").Call()),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("from <table> ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("where ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<ll_key> = ? and")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<deleted_cond>")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit(";")),
-		jen.Id("errorHandler").Op(":=").Qual("metis/util", "ErrToLogAndPanic").Call(jen.Id("recorder")),
-		jen.Id("db").Op(":=").Qual("metis/database", "FetchDB").Call(),
+		jen.Id("errorHandler").Op(":=").Add(useUtil("ErrToLogAndPanic")).Call(jen.Id("recorder")),
+		jen.Id("db").Op(":=").Add(useDatabase("FetchDB")).Call(),
 		jen.List(
 			jen.Id("stmt"),
 			jen.Id("err"),
-		).Op(":=").Id("db").Dot("Prepare").Call(jen.Id("sqlBuilder").Dot("String").Call()),
-		jen.Defer().Qual("metis/util", "DeferClose").Call(
+		).Op(":=").Id("db").Dot("Prepare").Call(jen.Lit(sql0)),
+		jen.Defer().Add(useUtil("DeferClose")).Call(
 			jen.Id("stmt"),
 			jen.Id("errorHandler"),
 		),
@@ -1847,12 +1725,12 @@ func genFuncSelectByLevel() jen.Code {
 			jen.Id("ag").Dot("getDbCtx").Call(),
 			jen.Id("level"),
 		),
-		jen.Defer().Qual("metis/util", "DeferClose").Call(
+		jen.Defer().Add(useUtil("DeferClose")).Call(
 			jen.Id("rows"),
 			jen.Id("errorHandler"),
 		),
 		jen.Id("errorHandler").Call(jen.Id("err")),
-		jen.Id("ds").Op(":=").Qual("metis/util", "Rows").Call(
+		jen.Id("ds").Op(":=").Add(useUtil("Rows")).Call(
 			jen.Id("rows"),
 			jen.Id("mapperAll"),
 		),
@@ -1860,30 +1738,30 @@ func genFuncSelectByLevel() jen.Code {
 	)
 }
 
-func genFuncSelectRoot() jen.Code {
-	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectRoot").Params(jen.Id("id").Id("int64")).Params(jen.Op("*").Add(useEntity(camel))).Block(
-		jen.Id("recorder").Op(":=").Id("logger").Dot("AccessLogger").Call(jen.Id("ag").Dot("ctx")),
+func genFuncSelectRoot(table string, columns []Column) jen.Code {
+	camel := strcase.ToCamel(table)
+	// lowerCamel := strcase.ToLowerCamel(table)
+	var sql0 string
+	if hasColumn(d_key, columns) {
+		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s = 1 AND %s = ? AND %s;", allFields(columns), table, ll_key, tn_key, ud_cond_key)
+	} else {
+		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s = 1 AND %s = ?;", allFields(columns), table, ll_key, tn_key)
+	}
+
+	return jen.Line().Comment("SelectRoot 查询根节点").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectRoot").Params(jen.Id("id").Id("int64")).Params(jen.Op("*").Add(useEntity(camel))).Block(
+		jen.Id("recorder").Op(":=").Add(useLogger("AccessLogger")).Call(jen.Id("ag").Dot("ctx")),
 		jen.Id("recorder").Dot("Sugar").Call().Dot("Infof").Call(
 			jen.Lit("查询 ID: %+v 的根节点数据"),
 			jen.Id("id"),
 		),
-		jen.Id("treeInfoSql").Op(":=").Id("treeFields").Call(),
-		jen.Var().Id("sqlBuilder").Qual("strings", "Builder"),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("select ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Id("allFields").Call()),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("from <table> ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("where ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<ll_key> = 1 and ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<tn_key> = ?")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<deleted_cond>")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit(";")),
-		jen.Id("errorHandler").Op(":=").Qual("metis/util", "ErrToLogAndPanic").Call(jen.Id("recorder")),
-		jen.Id("db").Op(":=").Qual("metis/database", "FetchDB").Call(),
+		jen.Id("treeInfoSql").Op(":=").Id("treeInfoSelectSql").Call(),
+		jen.Id("errorHandler").Op(":=").Add(useUtil("ErrToLogAndPanic")).Call(jen.Id("recorder")),
+		jen.Id("db").Op(":=").Add(useDatabase("FetchDB")).Call(),
 		jen.List(
 			jen.Id("tx"),
 			jen.Id("err"),
 		).Op(":=").Id("db").Dot("Begin").Call(),
-		jen.Defer().Qual("metis/util", "HandleTx").Call(
+		jen.Defer().Add(useUtil("HandleTx")).Call(
 			jen.Id("tx"),
 			jen.Id("errorHandler"),
 		),
@@ -1892,7 +1770,7 @@ func genFuncSelectRoot() jen.Code {
 			jen.Id("firstStmt"),
 			jen.Id("err"),
 		).Op(":=").Id("tx").Dot("Prepare").Call(jen.Id("treeInfoSql")),
-		jen.Defer().Qual("metis/util", "DeferClose").Call(
+		jen.Defer().Add(useUtil("DeferClose")).Call(
 			jen.Id("firstStmt"),
 			jen.Id("errorHandler"),
 		),
@@ -1901,15 +1779,15 @@ func genFuncSelectRoot() jen.Code {
 			jen.Id("ag").Dot("getDbCtx").Call(),
 			jen.Id("id"),
 		),
-		jen.Id("currentNode").Op(":=").Qual("metis/util", "Row").Call(
+		jen.Id("currentNode").Op(":=").Add(useUtil("Row")).Call(
 			jen.Id("row"),
 			jen.Id("mapperAll"),
 		),
 		jen.List(
 			jen.Id("secondStmt"),
 			jen.Id("err"),
-		).Op(":=").Id("tx").Dot("Prepare").Call(jen.Id("sqlBuilder").Dot("String").Call()),
-		jen.Defer().Qual("metis/util", "DeferClose").Call(
+		).Op(":=").Id("tx").Dot("Prepare").Call(jen.Lit(sql0)),
+		jen.Defer().Add(useUtil("DeferClose")).Call(
 			jen.Id("secondStmt"),
 			jen.Id("errorHandler"),
 		),
@@ -1918,7 +1796,7 @@ func genFuncSelectRoot() jen.Code {
 			jen.Id("ag").Dot("getDbCtx").Call(),
 			jen.Op("*").Id("currentNode").Dot("TreeNo"),
 		),
-		jen.Id("ds").Op(":=").Qual("metis/util", "Row").Call(
+		jen.Id("ds").Op(":=").Add(useUtil("Row")).Call(
 			jen.Id("row"),
 			jen.Id("mapperAll"),
 		),
@@ -1926,8 +1804,20 @@ func genFuncSelectRoot() jen.Code {
 	)
 }
 
-func genFuncSelectLeaf() jen.Code {
-	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectLeaf").Params(
+func genFuncSelectLeafOfNodeWithPage(table string, columns []Column) jen.Code {
+	camel := strcase.ToCamel(table)
+	// lowerCamel := strcase.ToLowerCamel(table)
+
+	var sql0, sql1 string
+	if hasColumn(d_key, columns) {
+		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s >= ? AND %s <= ? AND %s + 1 = %s AND %s = ? AND %s ORDER BY %s LIMIT ? OFFSET ?;", allFields(columns), table, l_key, r_key, l_key, r_key, tn_key, ud_cond_key, l_key)
+		sql1 = fmt.Sprintf("SELECT %s FROM %s WHERE %s >= ? AND %s <= ? AND %s + 1 = %s AND %s = ? AND %s;", allFields(columns), table, l_key, r_key, l_key, r_key, tn_key, ud_cond_key)
+	} else {
+		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s >= ? AND %s <= ? AND %s + 1 = %s AND %s = ? ORDER BY %s LIMIT ? OFFSET ?;", allFields(columns), table, l_key, r_key, l_key, r_key, tn_key, l_key)
+		sql1 = fmt.Sprintf("SELECT %s FROM %s WHERE %s >= ? AND %s <= ? AND %s + 1 = %s AND %s = ?;", allFields(columns), table, l_key, r_key, l_key, r_key, tn_key)
+	}
+
+	return jen.Line().Comment("SelectLeafOfNodeWithPage 查询对应节点叶子节点(分页)").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectLeafOfNodeWithPage").Params(
 		jen.Id("id").Id("int64"),
 		jen.List(
 			jen.Id("page"),
@@ -1937,33 +1827,19 @@ func genFuncSelectLeaf() jen.Code {
 		jen.Index().Op("*").Add(useEntity(camel)),
 		jen.Id("int64"),
 	).Block(
-		jen.Id("recorder").Op(":=").Id("logger").Dot("AccessLogger").Call(jen.Id("ag").Dot("ctx")),
+		jen.Id("recorder").Op(":=").Add(useLogger("AccessLogger")).Call(jen.Id("ag").Dot("ctx")),
 		jen.Id("recorder").Dot("Sugar").Call().Dot("Infof").Call(
 			jen.Lit("分页查询 ID: %+v 的叶子节点数据"),
 			jen.Id("id"),
 		),
-		jen.Id("treeInfoSql").Op(":=").Id("treeFields").Call(),
-		jen.Var().Id("sqlBuilder").Qual("strings", "Builder"),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("select ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Id("allFields").Call()),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("from <table> ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("where ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<l_key> >= ? and ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<r_key> <= ? and ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<l_key> + 1 = <r_key> and ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<tn_key> = ?")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<deleted_cond>")),
-		jen.Var().Id("noCondSql").Op("=").Id("sqlBuilder").Dot("String").Call().Op("+").Lit(";"),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit(" limit ?")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit(" offset ?")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit(";")),
-		jen.Id("errorHandler").Op(":=").Qual("metis/util", "ErrToLogAndPanic").Call(jen.Id("recorder")),
-		jen.Id("db").Op(":=").Qual("metis/database", "FetchDB").Call(),
+		jen.Id("treeInfoSql").Op(":=").Id("treeInfoSelectSql").Call(),
+		jen.Id("errorHandler").Op(":=").Add(useUtil("ErrToLogAndPanic")).Call(jen.Id("recorder")),
+		jen.Id("db").Op(":=").Add(useDatabase("FetchDB")).Call(),
 		jen.List(
 			jen.Id("tx"),
 			jen.Id("err"),
 		).Op(":=").Id("db").Dot("Begin").Call(),
-		jen.Defer().Qual("metis/util", "HandleTx").Call(
+		jen.Defer().Add(useUtil("HandleTx")).Call(
 			jen.Id("tx"),
 			jen.Id("errorHandler"),
 		),
@@ -1972,7 +1848,7 @@ func genFuncSelectLeaf() jen.Code {
 			jen.Id("firstStmt"),
 			jen.Id("err"),
 		).Op(":=").Id("tx").Dot("Prepare").Call(jen.Id("treeInfoSql")),
-		jen.Defer().Qual("metis/util", "DeferClose").Call(
+		jen.Defer().Add(useUtil("DeferClose")).Call(
 			jen.Id("firstStmt"),
 			jen.Id("errorHandler"),
 		),
@@ -1981,15 +1857,15 @@ func genFuncSelectLeaf() jen.Code {
 			jen.Id("ag").Dot("getDbCtx").Call(),
 			jen.Id("id"),
 		),
-		jen.Id("currentNode").Op(":=").Qual("metis/util", "Row").Call(
+		jen.Id("currentNode").Op(":=").Add(useUtil("Row")).Call(
 			jen.Id("row"),
 			jen.Id("mapperAll"),
 		),
 		jen.List(
 			jen.Id("secondStmt"),
 			jen.Id("err"),
-		).Op(":=").Id("tx").Dot("Prepare").Call(jen.Id("sqlBuilder").Dot("String").Call()),
-		jen.Defer().Qual("metis/util", "DeferClose").Call(
+		).Op(":=").Id("tx").Dot("Prepare").Call(jen.Lit(sql0)),
+		jen.Defer().Add(useUtil("DeferClose")).Call(
 			jen.Id("secondStmt"),
 			jen.Id("errorHandler"),
 		),
@@ -2005,20 +1881,20 @@ func genFuncSelectLeaf() jen.Code {
 			jen.Id("size"),
 			jen.Parens(jen.Id("page").Op("-").Lit(1)).Op("*").Id("size"),
 		),
-		jen.Defer().Qual("metis/util", "DeferClose").Call(
+		jen.Defer().Add(useUtil("DeferClose")).Call(
 			jen.Id("rows"),
 			jen.Id("errorHandler"),
 		),
 		jen.Id("errorHandler").Call(jen.Id("err")),
-		jen.Id("ds").Op(":=").Qual("metis/util", "Rows").Call(
+		jen.Id("ds").Op(":=").Add(useUtil("Rows")).Call(
 			jen.Id("rows"),
 			jen.Id("mapperAll"),
 		),
 		jen.List(
 			jen.Id("thirdStmt"),
 			jen.Id("err"),
-		).Op(":=").Id("tx").Dot("Prepare").Call(jen.Id("noCondSql")),
-		jen.Defer().Qual("metis/util", "DeferClose").Call(
+		).Op(":=").Id("tx").Dot("Prepare").Call(jen.Lit(sql1)),
+		jen.Defer().Add(useUtil("DeferClose")).Call(
 			jen.Id("thirdStmt"),
 			jen.Id("errorHandler"),
 		),
@@ -2029,7 +1905,7 @@ func genFuncSelectLeaf() jen.Code {
 			jen.Op("*").Id("currentNode").Dot("Right"),
 			jen.Op("*").Id("currentNode").Dot("TreeNo"),
 		),
-		jen.Id("total").Op(":=").Qual("metis/util", "Row").Call(
+		jen.Id("total").Op(":=").Add(useUtil("Row")).Call(
 			jen.Id("row"),
 			jen.Id("mapperNumeric").Index(jen.Id("int64")),
 		),
@@ -2040,32 +1916,31 @@ func genFuncSelectLeaf() jen.Code {
 	)
 }
 
-func genFuncSelectAllLeaf() jen.Code {
-	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectAllLeaf").Params(jen.Id("id").Id("int64")).Params(jen.Index().Op("*").Add(useEntity(camel))).Block(
-		jen.Id("recorder").Op(":=").Id("logger").Dot("AccessLogger").Call(jen.Id("ag").Dot("ctx")),
+func genFuncSelectAllLeafOfNode(table string, columns []Column) jen.Code {
+	camel := strcase.ToCamel(table)
+	// lowerCamel := strcase.ToLowerCamel(table)
+
+	var sql0 string
+	if hasColumn(d_key, columns) {
+		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s >= ? AND %s <= ? AND %s + 1 = %s AND %s = ? AND %s ORDER BY %s;", allFields(columns), table, l_key, r_key, l_key, r_key, tn_key, ud_cond_key, l_key)
+	} else {
+		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s >= ? AND %s <= ? AND %s + 1 = %s AND %s = ? ORDER BY %s;", allFields(columns), table, l_key, r_key, l_key, r_key, tn_key, l_key)
+	}
+
+	return jen.Line().Comment("SelectAllLeafOfNode 查询对应节点的所有叶子节点").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectAllLeafOfNode").Params(jen.Id("id").Id("int64")).Params(jen.Index().Op("*").Add(useEntity(camel))).Block(
+		jen.Id("recorder").Op(":=").Add(useLogger("AccessLogger")).Call(jen.Id("ag").Dot("ctx")),
 		jen.Id("recorder").Dot("Sugar").Call().Dot("Infof").Call(
 			jen.Lit("查询 ID: %+v 的所有叶子节点数据"),
 			jen.Id("id"),
 		),
-		jen.Id("treeInfoSql").Op(":=").Id("treeFields").Call(),
-		jen.Var().Id("sqlBuilder").Qual("strings", "Builder"),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("select ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Id("allFields").Call()),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("from <table> ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("where ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<l_key> >= ? and ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<r_key> <= ? and ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<l_key> + 1 = <r_key> and ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<tn_key> = ?")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<deleted_cond>")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit(";")),
-		jen.Id("errorHandler").Op(":=").Qual("metis/util", "ErrToLogAndPanic").Call(jen.Id("recorder")),
-		jen.Id("db").Op(":=").Qual("metis/database", "FetchDB").Call(),
+		jen.Id("treeInfoSql").Op(":=").Id("treeInfoSelectSql").Call(),
+		jen.Id("errorHandler").Op(":=").Add(useUtil("ErrToLogAndPanic")).Call(jen.Id("recorder")),
+		jen.Id("db").Op(":=").Add(useDatabase("FetchDB")).Call(),
 		jen.List(
 			jen.Id("tx"),
 			jen.Id("err"),
 		).Op(":=").Id("db").Dot("Begin").Call(),
-		jen.Defer().Qual("metis/util", "HandleTx").Call(
+		jen.Defer().Add(useUtil("HandleTx")).Call(
 			jen.Id("tx"),
 			jen.Id("errorHandler"),
 		),
@@ -2074,7 +1949,7 @@ func genFuncSelectAllLeaf() jen.Code {
 			jen.Id("firstStmt"),
 			jen.Id("err"),
 		).Op(":=").Id("tx").Dot("Prepare").Call(jen.Id("treeInfoSql")),
-		jen.Defer().Qual("metis/util", "DeferClose").Call(
+		jen.Defer().Add(useUtil("DeferClose")).Call(
 			jen.Id("firstStmt"),
 			jen.Id("errorHandler"),
 		),
@@ -2083,15 +1958,15 @@ func genFuncSelectAllLeaf() jen.Code {
 			jen.Id("ag").Dot("getDbCtx").Call(),
 			jen.Id("id"),
 		),
-		jen.Id("currentNode").Op(":=").Qual("metis/util", "Row").Call(
+		jen.Id("currentNode").Op(":=").Add(useUtil("Row")).Call(
 			jen.Id("row"),
 			jen.Id("mapperAll"),
 		),
 		jen.List(
 			jen.Id("secondStmt"),
 			jen.Id("err"),
-		).Op(":=").Id("tx").Dot("Prepare").Call(jen.Id("sqlBuilder").Dot("String").Call()),
-		jen.Defer().Qual("metis/util", "DeferClose").Call(
+		).Op(":=").Id("tx").Dot("Prepare").Call(jen.Lit(sql0)),
+		jen.Defer().Add(useUtil("DeferClose")).Call(
 			jen.Id("secondStmt"),
 			jen.Id("errorHandler"),
 		),
@@ -2105,12 +1980,12 @@ func genFuncSelectAllLeaf() jen.Code {
 			jen.Op("*").Id("currentNode").Dot("Right"),
 			jen.Op("*").Id("currentNode").Dot("TreeNo"),
 		),
-		jen.Defer().Qual("metis/util", "DeferClose").Call(
+		jen.Defer().Add(useUtil("DeferClose")).Call(
 			jen.Id("rows"),
 			jen.Id("errorHandler"),
 		),
 		jen.Id("errorHandler").Call(jen.Id("err")),
-		jen.Id("ds").Op(":=").Qual("metis/util", "Rows").Call(
+		jen.Id("ds").Op(":=").Add(useUtil("Rows")).Call(
 			jen.Id("rows"),
 			jen.Id("mapperAll"),
 		),
@@ -2118,25 +1993,27 @@ func genFuncSelectAllLeaf() jen.Code {
 	)
 }
 
-func genFuncSelectAllRoot() jen.Code {
-	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectAllRoot").Params().Params(jen.Index().Op("*").Add(useEntity(camel))).Block(
-		jen.Id("recorder").Op(":=").Id("logger").Dot("AccessLogger").Call(jen.Id("ag").Dot("ctx")),
+func genFuncSelectAllRoot(table string, columns []Column) jen.Code {
+	camel := strcase.ToCamel(table)
+	// lowerCamel := strcase.ToLowerCamel(table)
+
+	var sql0 string
+	if hasColumn(d_key, columns) {
+		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s = 1 AND %s ORDER BY %s;", allFields(columns), table, ll_key, ud_cond_key, tn_key)
+	} else {
+		sql0 = fmt.Sprintf("SELECT %s FROM %s WHERE %s = 1 ORDER BY %s;", allFields(columns), table, ll_key, tn_key)
+	}
+
+	return jen.Line().Comment("SelectAllRoot 查询所有的根节点").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("SelectAllRoot").Params().Params(jen.Index().Op("*").Add(useEntity(camel))).Block(
+		jen.Id("recorder").Op(":=").Add(useLogger("AccessLogger")).Call(jen.Id("ag").Dot("ctx")),
 		jen.Id("recorder").Dot("Info").Call(jen.Lit("查询的所有根节点数据")),
-		jen.Var().Id("sqlBuilder").Qual("strings", "Builder"),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("select ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Id("allFields").Call()),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("from <table> ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("where ")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<ll_key> = 1")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<deleted_cond>")),
-		jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit(";")),
-		jen.Id("errorHandler").Op(":=").Qual("metis/util", "ErrToLogAndPanic").Call(jen.Id("recorder")),
-		jen.Id("db").Op(":=").Qual("metis/database", "FetchDB").Call(),
+		jen.Id("errorHandler").Op(":=").Add(useUtil("ErrToLogAndPanic")).Call(jen.Id("recorder")),
+		jen.Id("db").Op(":=").Add(useDatabase("FetchDB")).Call(),
 		jen.List(
 			jen.Id("stmt"),
 			jen.Id("err"),
-		).Op(":=").Id("db").Dot("Prepare").Call(jen.Id("sqlBuilder").Dot("String").Call()),
-		jen.Defer().Qual("metis/util", "DeferClose").Call(
+		).Op(":=").Id("db").Dot("Prepare").Call(jen.Lit(sql0)),
+		jen.Defer().Add(useUtil("DeferClose")).Call(
 			jen.Id("stmt"),
 			jen.Id("errorHandler"),
 		),
@@ -2145,12 +2022,12 @@ func genFuncSelectAllRoot() jen.Code {
 			jen.Id("rows"),
 			jen.Id("err"),
 		).Op(":=").Id("stmt").Dot("QueryContext").Call(jen.Id("ag").Dot("getDbCtx").Call()),
-		jen.Defer().Qual("metis/util", "DeferClose").Call(
+		jen.Defer().Add(useUtil("DeferClose")).Call(
 			jen.Id("rows"),
 			jen.Id("errorHandler"),
 		),
 		jen.Id("errorHandler").Call(jen.Id("err")),
-		jen.Id("ds").Op(":=").Qual("metis/util", "Rows").Call(
+		jen.Id("ds").Op(":=").Add(useUtil("Rows")).Call(
 			jen.Id("rows"),
 			jen.Id("mapperAll"),
 		),
@@ -2158,11 +2035,12 @@ func genFuncSelectAllRoot() jen.Code {
 	)
 }
 
-func genFuncInsert() jen.Code {
+func genFuncInsert(table string, columns []Column) jen.Code {
+	camel := strcase.ToCamel(table)
+	lowerCamel := strcase.ToLowerCamel(table)
+
 	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("Insert").Params(
-		jen.Id("tx").Op("*").Qual(
-			"database/sql", "Tx",
-		),
+		jen.Id("tx").Op("*").Add(useSql("Tx")),
 		jen.Id(lowerCamel).Op("*").Add(useEntity(camel)),
 	).Params(jen.Id("int64")).Block(
 		jen.Id("ids").Op(":=").Id("ag").Dot("BatchInsertWithFunc").Call(
@@ -2177,11 +2055,12 @@ func genFuncInsert() jen.Code {
 	)
 }
 
-func genFuncInsertUnderNode() jen.Code {
-	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("InsertUnderNode").Params(
-		jen.Id("tx").Op("*").Qual(
-			"database/sql", "Tx",
-		),
+func genFuncInsertUnderNode(table string, columns []Column) jen.Code {
+	camel := strcase.ToCamel(table)
+	lowerCamel := strcase.ToLowerCamel(table)
+
+	return jen.Line().Comment("InsertUnderNode 插入至节点下方(做叶子节点)").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("InsertUnderNode").Params(
+		jen.Id("tx").Op("*").Add(useSql("Tx")),
 		jen.Id(lowerCamel).Op("*").Add(useEntity(camel)),
 		jen.Id("pid").Id("int64"),
 	).Params(jen.Id("int64")).Block(
@@ -2197,11 +2076,12 @@ func genFuncInsertUnderNode() jen.Code {
 	)
 }
 
-func genFuncInsertBetweenNode() jen.Code {
-	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("InsertBetweenNode").Params(
-		jen.Id("tx").Op("*").Qual(
-			"database/sql", "Tx",
-		),
+func genFuncInsertBetweenNode(table string, columns []Column) jen.Code {
+	camel := strcase.ToCamel(table)
+	lowerCamel := strcase.ToLowerCamel(table)
+
+	return jen.Line().Comment("InsertBetweenNode 插入至两节点间").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("InsertBetweenNode").Params(
+		jen.Id("tx").Op("*").Add(useSql("Tx")),
 		jen.Id(lowerCamel).Op("*").Add(useEntity(camel)),
 		jen.List(
 			jen.Id("pid"),
@@ -2220,11 +2100,12 @@ func genFuncInsertBetweenNode() jen.Code {
 	)
 }
 
-func genFuncBatchInsert() jen.Code {
-	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("BatchInsert").Params(
-		jen.Id("tx").Op("*").Qual(
-			"database/sql", "Tx",
-		),
+func genFuncBatchInsert(table string, columns []Column) jen.Code {
+	camel := strcase.ToCamel(table)
+	lowerCamel := strcase.ToLowerCamel(table)
+
+	return jen.Line().Comment("BatchInsert 批量插入").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("BatchInsert").Params(
+		jen.Id("tx").Op("*").Add(useSql("Tx")),
 		jen.Id(lowerCamel+"s").Index().Op("*").Add(useEntity(camel)),
 	).Params(jen.Index().Id("int64")).Block(
 		jen.Id("ids").Op(":=").Id("ag").Dot("BatchInsertWithFunc").Call(
@@ -2239,11 +2120,12 @@ func genFuncBatchInsert() jen.Code {
 	)
 }
 
-func genFuncBatchInsertUnderNode() jen.Code {
-	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("BatchInsertUnderNode").Params(
-		jen.Id("tx").Op("*").Qual(
-			"database/sql", "Tx",
-		),
+func genFuncBatchInsertUnderNode(table string, columns []Column) jen.Code {
+	camel := strcase.ToCamel(table)
+	lowerCamel := strcase.ToLowerCamel(table)
+
+	return jen.Line().Comment("BatchInsertUnderNode 批量插入至节点下方").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("BatchInsertUnderNode").Params(
+		jen.Id("tx").Op("*").Add(useSql("Tx")),
 		jen.Id(lowerCamel+"s").Index().Op("*").Add(useEntity(camel)),
 		jen.Id("pid").Id("int64"),
 	).Params(jen.Index().Id("int64")).Block(
@@ -2259,11 +2141,11 @@ func genFuncBatchInsertUnderNode() jen.Code {
 	)
 }
 
-func genFuncBatchInsertBetweenNode() jen.Code {
-	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("BatchInsertBetweenNode").Params(
-		jen.Id("tx").Op("*").Qual(
-			"database/sql", "Tx",
-		),
+func genFuncBatchInsertBetweenNode(table string, columns []Column) jen.Code {
+	camel := strcase.ToCamel(table)
+	lowerCamel := strcase.ToLowerCamel(table)
+	return jen.Line().Comment("BatchInsertBetweenNode 批量插入至两节点间(谨慎使用)").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("BatchInsertBetweenNode").Params(
+		jen.Id("tx").Op("*").Add(useSql("Tx")),
 		jen.Id(lowerCamel+"s").Index().Op("*").Add(useEntity(camel)),
 		jen.List(
 			jen.Id("pid"),
@@ -2282,11 +2164,12 @@ func genFuncBatchInsertBetweenNode() jen.Code {
 	)
 }
 
-func genFuncInsertNonNil() jen.Code {
-	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("InsertNonNil").Params(
-		jen.Id("tx").Op("*").Qual(
-			"database/sql", "Tx",
-		),
+func genFuncInsertNonNil(table string, columns []Column) jen.Code {
+	camel := strcase.ToCamel(table)
+	lowerCamel := strcase.ToLowerCamel(table)
+
+	return jen.Line().Comment("InsertNonNil 插入非空字段").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("InsertNonNil").Params(
+		jen.Id("tx").Op("*").Add(useSql("Tx")),
 		jen.Id(lowerCamel).Op("*").Add(useEntity(camel)),
 	).Params(jen.Id("int64")).Block(
 		jen.Id("ids").Op(":=").Id("ag").Dot("BatchInsertWithFunc").Call(
@@ -2301,11 +2184,12 @@ func genFuncInsertNonNil() jen.Code {
 	)
 }
 
-func genFuncInsertNonNilUnderNode() jen.Code {
-	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("InsertNonNilUnderNode").Params(
-		jen.Id("tx").Op("*").Qual(
-			"database/sql", "Tx",
-		),
+func genFuncInsertNonNilUnderNode(table string, columns []Column) jen.Code {
+	camel := strcase.ToCamel(table)
+	lowerCamel := strcase.ToLowerCamel(table)
+
+	return jen.Line().Comment("InsertNonNilUnderNode 插入非空字段并挂载到某节点下方").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("InsertNonNilUnderNode").Params(
+		jen.Id("tx").Op("*").Add(useSql("Tx")),
 		jen.Id(lowerCamel).Op("*").Add(useEntity(camel)),
 		jen.Id("pid").Id("int64"),
 	).Params(jen.Id("int64")).Block(
@@ -2321,11 +2205,12 @@ func genFuncInsertNonNilUnderNode() jen.Code {
 	)
 }
 
-func genFuncInsertNonNilBetweenNode() jen.Code {
-	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("InsertNonNilBetweenNode").Params(
-		jen.Id("tx").Op("*").Qual(
-			"database/sql", "Tx",
-		),
+func genFuncInsertNonNilBetweenNode(table string, columns []Column) jen.Code {
+	camel := strcase.ToCamel(table)
+	lowerCamel := strcase.ToLowerCamel(table)
+
+	return jen.Line().Comment("InsertNonNilBetweenNode 插入非空字段并挂载到两节点之间").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("InsertNonNilBetweenNode").Params(
+		jen.Id("tx").Op("*").Add(useSql("Tx")),
 		jen.Id(lowerCamel).Op("*").Add(useEntity(camel)),
 		jen.List(
 			jen.Id("pid"),
@@ -2344,13 +2229,14 @@ func genFuncInsertNonNilBetweenNode() jen.Code {
 	)
 }
 
-func genFuncInsertWithFunc() jen.Code {
-	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("InsertWithFunc").Params(
-		jen.Id("tx").Op("*").Qual(
-			"database/sql", "Tx",
-		),
+func genFuncInsertWithFunc(table string, columns []Column) jen.Code {
+	camel := strcase.ToCamel(table)
+	lowerCamel := strcase.ToLowerCamel(table)
+
+	return jen.Line().Comment("InsertWithFunc 根据函数插入字段").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("InsertWithFunc").Params(
+		jen.Id("tx").Op("*").Add(useSql("Tx")),
 		jen.Id(lowerCamel).Op("*").Add(useEntity(camel)),
-		jen.Id("fn").Params(jen.Id("f").Id("any")).Params(jen.Id("bool")),
+		genDeclAnonymousFunc(),
 	).Params(jen.Id("int64")).Block(
 		jen.Id("ids").Op(":=").Id("ag").Dot("BatchInsertWithFunc").Call(
 			jen.Id("tx"),
@@ -2364,14 +2250,15 @@ func genFuncInsertWithFunc() jen.Code {
 	)
 }
 
-func genFuncInsertWithFuncUnderNode() jen.Code {
-	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("InsertWithFuncUnderNode").Params(
-		jen.Id("tx").Op("*").Qual(
-			"database/sql", "Tx",
-		),
+func genFuncInsertWithFuncUnderNode(table string, columns []Column) jen.Code {
+	camel := strcase.ToCamel(table)
+	lowerCamel := strcase.ToLowerCamel(table)
+
+	return jen.Line().Comment("InsertWithFuncUnderNode 根据函数插入并挂载到某节点下方").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("InsertWithFuncUnderNode").Params(
+		jen.Id("tx").Op("*").Add(useSql("Tx")),
 		jen.Id(lowerCamel).Op("*").Add(useEntity(camel)),
 		jen.Id("pid").Id("int64"),
-		jen.Id("fn").Params(jen.Id("f").Id("any")).Params(jen.Id("bool")),
+		genDeclAnonymousFunc(),
 	).Params(jen.Id("int64")).Block(
 		jen.Id("ids").Op(":=").Id("ag").Dot("BatchInsertWithFunc").Call(
 			jen.Id("tx"),
@@ -2385,17 +2272,18 @@ func genFuncInsertWithFuncUnderNode() jen.Code {
 	)
 }
 
-func genFuncInsertWithFuncBetweenNode() jen.Code {
-	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("InsertWithFuncBetweenNode").Params(
-		jen.Id("tx").Op("*").Qual(
-			"database/sql", "Tx",
-		),
+func genFuncInsertWithFuncBetweenNode(table string, columns []Column) jen.Code {
+	camel := strcase.ToCamel(table)
+	lowerCamel := strcase.ToLowerCamel(table)
+
+	return jen.Line().Comment("InsertWithFuncBetweenNode 根据函数插入并挂载到两节点之间").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("InsertWithFuncBetweenNode").Params(
+		jen.Id("tx").Op("*").Add(useSql("Tx")),
 		jen.Id(lowerCamel).Op("*").Add(useEntity(camel)),
 		jen.List(
 			jen.Id("pid"),
 			jen.Id("sid"),
 		).Id("int64"),
-		jen.Id("fn").Params(jen.Id("f").Id("any")).Params(jen.Id("bool")),
+		genDeclAnonymousFunc(),
 	).Params(jen.Id("int64")).Block(
 		jen.Id("ids").Op(":=").Id("ag").Dot("BatchInsertWithFunc").Call(
 			jen.Id("tx"),
@@ -2409,19 +2297,20 @@ func genFuncInsertWithFuncBetweenNode() jen.Code {
 	)
 }
 
-func genFuncBatchInsertWithFunc() jen.Code {
-	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("BatchInsertWithFunc").Params(
-		jen.Id("tx").Op("*").Qual(
-			"database/sql", "Tx",
-		),
+func genFuncBatchInsertWithFunc(table string, columns []Column) jen.Code {
+	camel := strcase.ToCamel(table)
+	lowerCamel := strcase.ToLowerCamel(table)
+
+	return jen.Line().Comment("BatchInsertWithFunc 根据函数批量插入").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("BatchInsertWithFunc").Params(
+		jen.Id("tx").Op("*").Add(useSql("Tx")),
 		jen.Id(lowerCamel+"s").Index().Op("*").Add(useEntity(camel)),
 		jen.List(
 			jen.Id("pid"),
 			jen.Id("sid"),
 		).Id("int64"),
-		jen.Id("fn").Params(jen.Id("f").Id("any")).Params(jen.Id("bool")),
+		genDeclAnonymousFunc(),
 	).Params(jen.Index().Id("int64")).Block(
-		jen.Id("recorder").Op(":=").Id("logger").Dot("AccessLogger").Call(jen.Id("ag").Dot("ctx")),
+		jen.Id("recorder").Op(":=").Add(useLogger("AccessLogger")).Call(jen.Id("ag").Dot("ctx")),
 		jen.Id("recorder").Dot("Sugar").Call().Dot("Infof").Call(
 			jen.Lit("插入至 PID: %+v SID: %+v 的同代数据"),
 			jen.Id("pid"),
@@ -2449,11 +2338,13 @@ func genFuncBatchInsertWithFunc() jen.Code {
 	)
 }
 
-func genFuncDeleteByID() jen.Code {
-	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("DeleteByID").Params(
-		jen.Id("tx").Op("*").Qual(
-			"database/sql", "Tx",
-		),
+func genFuncDeleteByID(table string, columns []Column) jen.Code {
+	if !hasColumn(p_key, columns) {
+		return jen.Null()
+	}
+
+	return jen.Line().Comment("DeleteByID 根据 ID 删除").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("DeleteByID").Params(
+		jen.Id("tx").Op("*").Add(useSql("Tx")),
 		jen.Id("id").Id("int64"),
 	).Params(jen.Id("bool")).Block(
 		jen.Return().Id("ag").Dot("BatchDeleteByID").Call(
@@ -2463,11 +2354,13 @@ func genFuncDeleteByID() jen.Code {
 	)
 }
 
-func genFuncDeleteByIDs() jen.Code {
-	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("DeleteByIDs").Params(
-		jen.Id("tx").Op("*").Qual(
-			"database/sql", "Tx",
-		),
+func genFuncDeleteByIDs(table string, columns []Column) jen.Code {
+	if !hasColumn(p_key, columns) {
+		return jen.Null()
+	}
+
+	return jen.Line().Comment("DeleteByIDs 根据 ID 列表删除").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("DeleteByIDs").Params(
+		jen.Id("tx").Op("*").Add(useSql("Tx")),
 		jen.Id("ids").Op("...").Id("int64"),
 	).Params(jen.Id("bool")).Block(
 		jen.Return().Id("ag").Dot("BatchDeleteByID").Call(
@@ -2477,14 +2370,16 @@ func genFuncDeleteByIDs() jen.Code {
 	)
 }
 
-func genFuncBatchDeleteByID() jen.Code {
-	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("BatchDeleteByID").Params(
-		jen.Id("tx").Op("*").Qual(
-			"database/sql", "Tx",
-		),
+func genFuncBatchDeleteByID(table string, columns []Column) jen.Code {
+	if !hasColumn(p_key, columns) {
+		return jen.Null()
+	}
+
+	return jen.Line().Comment("BatchDeleteByID 根据 ID 批量删除").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("BatchDeleteByID").Params(
+		jen.Id("tx").Op("*").Add(useSql("Tx")),
 		jen.Id("ids").Index().Id("int64"),
 	).Params(jen.Id("bool")).Block(
-		jen.Id("recorder").Op(":=").Id("logger").Dot("AccessLogger").Call(jen.Id("ag").Dot("ctx")),
+		jen.Id("recorder").Op(":=").Add(useLogger("AccessLogger")).Call(jen.Id("ag").Dot("ctx")),
 		jen.Id("recorder").Dot("Sugar").Call().Dot("Infof").Call(
 			jen.Lit("删除 ID 列表: %+v 的数据"),
 			jen.Id("ids"),
@@ -2505,11 +2400,15 @@ func genFuncBatchDeleteByID() jen.Code {
 	)
 }
 
-func genFuncUpdateByID() jen.Code {
-	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("UpdateByID").Params(
-		jen.Id("tx").Op("*").Qual(
-			"database/sql", "Tx",
-		),
+func genFuncUpdateByID(table string, columns []Column) jen.Code {
+	if !hasColumn(p_key, columns) {
+		return jen.Null()
+	}
+
+	camel := strcase.ToCamel(table)
+	lowerCamel := strcase.ToLowerCamel(table)
+	return jen.Line().Comment("UpdateByID 根据 ID 批量更新").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("UpdateByID").Params(
+		jen.Id("tx").Op("*").Add(useSql("Tx")),
 		jen.Id(lowerCamel).Op("*").Add(useEntity(camel)),
 	).Params(jen.Id("bool")).Block(
 		jen.Return().Id("ag").Dot("BatchUpdateWithFuncByID").Call(
@@ -2520,11 +2419,15 @@ func genFuncUpdateByID() jen.Code {
 	)
 }
 
-func genFuncUpdateNonNilByID() jen.Code {
-	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("UpdateNonNilByID").Params(
-		jen.Id("tx").Op("*").Qual(
-			"database/sql", "Tx",
-		),
+func genFuncUpdateNonNilByID(table string, columns []Column) jen.Code {
+	if !hasColumn(p_key, columns) {
+		return jen.Null()
+	}
+
+	camel := strcase.ToCamel(table)
+	lowerCamel := strcase.ToLowerCamel(table)
+	return jen.Line().Comment("UpdateNonNilByID 根据 ID 更新非空字段").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("UpdateNonNilByID").Params(
+		jen.Id("tx").Op("*").Add(useSql("Tx")),
 		jen.Id(lowerCamel).Op("*").Add(useEntity(camel)),
 	).Params(jen.Id("bool")).Block(
 		jen.Return().Id("ag").Dot("BatchUpdateWithFuncByID").Call(
@@ -2535,13 +2438,17 @@ func genFuncUpdateNonNilByID() jen.Code {
 	)
 }
 
-func genFuncUpdateWithFuncByID() jen.Code {
-	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("UpdateWithFuncByID").Params(
-		jen.Id("tx").Op("*").Qual(
-			"database/sql", "Tx",
-		),
+func genFuncUpdateWithFuncByID(table string, columns []Column) jen.Code {
+	if !hasColumn(p_key, columns) {
+		return jen.Null()
+	}
+
+	camel := strcase.ToCamel(table)
+	lowerCamel := strcase.ToLowerCamel(table)
+	return jen.Line().Comment("UpdateWithFuncByID 根据 ID 更新满足函数的字段").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("UpdateWithFuncByID").Params(
+		jen.Id("tx").Op("*").Add(useSql("Tx")),
 		jen.Id(lowerCamel).Op("*").Add(useEntity(camel)),
-		jen.Id("fn").Params(jen.Id("f").Id("any")).Params(jen.Id("bool")),
+		genDeclAnonymousFunc(),
 	).Params(jen.Id("bool")).Block(
 		jen.Return().Id("ag").Dot("BatchUpdateWithFuncByID").Call(
 			jen.Id("tx"),
@@ -2551,15 +2458,27 @@ func genFuncUpdateWithFuncByID() jen.Code {
 	)
 }
 
-func genFuncBatchUpdateWithFuncByID() jen.Code {
-	return jen.Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("BatchUpdateWithFuncByID").Params(
-		jen.Id("tx").Op("*").Qual(
-			"database/sql", "Tx",
-		),
+func genFuncBatchUpdateWithFuncByID(table string, columns []Column) jen.Code {
+	if !hasColumn(p_key, columns) {
+		return jen.Null()
+	}
+
+	camel := strcase.ToCamel(table)
+	lowerCamel := strcase.ToLowerCamel(table)
+	var sql0, sql1 string
+	sql0 = fmt.Sprintf("UPDATE %s ", table)
+	if hasColumn(d_key, columns) {
+		sql1 = fmt.Sprintf(" WHERE %s = ? AND %s;", p_key, ud_cond_key)
+	} else {
+		sql1 = fmt.Sprintf(" WHERE %s = ?;", p_key)
+	}
+
+	return jen.Line().Comment("BatchUpdateWithFuncByID 根据 ID 批量更新满足函数的字段").Line().Func().Params(jen.Id("ag").Op("*").Id("autoGen")).Id("BatchUpdateWithFuncByID").Params(
+		jen.Id("tx").Op("*").Add(useSql("Tx")),
 		jen.Id(lowerCamel+"s").Index().Op("*").Add(useEntity(camel)),
-		jen.Id("fn").Params(jen.Id("f").Id("any")).Params(jen.Id("bool")),
+		genDeclAnonymousFunc(),
 	).Params(jen.Id("bool")).Block(
-		jen.Id("recorder").Op(":=").Id("logger").Dot("AccessLogger").Call(jen.Id("ag").Dot("ctx")),
+		jen.Id("recorder").Op(":=").Add(useLogger("AccessLogger")).Call(jen.Id("ag").Dot("ctx")),
 		jen.Id("recorder").Dot("Sugar").Call().Dot("Infof").Call(jen.Lit("批量更新列表数据")),
 		jen.For(
 			jen.List(
@@ -2576,19 +2495,15 @@ func genFuncBatchUpdateWithFuncByID() jen.Code {
 				jen.Id(lowerCamel),
 				jen.Id("fn"),
 			),
-			jen.Var().Id("sqlBuilder").Qual("strings", "Builder"),
-			jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("update ")),
-			jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<table> ")),
+			jen.Var().Id("sqlBuilder").Add(useStrings("Builder")),
+			jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit(sql0)),
 			jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Id("fields")),
-			jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit(" where ")),
-			jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<p_key> = ?")),
-			jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit("<deleted_cond>")),
-			jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit(";")),
+			jen.Id("sqlBuilder").Dot("WriteString").Call(jen.Lit(sql1)),
 			jen.Id("values").Op("=").Id("append").Call(
 				jen.Id("values"),
 				jen.Id("id"),
 			),
-			jen.Id("errorHandler").Op(":=").Qual("metis/util", "ErrToLogAndPanic").Call(jen.Id("recorder")),
+			jen.Id("errorHandler").Op(":=").Add(useUtil("ErrToLogAndPanic")).Call(jen.Id("recorder")),
 			jen.List(
 				jen.Id("stmt"),
 				jen.Id("err"),
@@ -2621,71 +2536,57 @@ func genTreeRepositoryFile(table string, columns []Column) *jen.File {
 	ret.Add(genFuncGetDbCtx())
 	ret.Add(genFuncMapperAll(table, columns))
 	ret.Add(genFuncMapperNumeric())
-	ret.Add(genFuncTreeFields(table, columns))
+	ret.Add(genFuncTreeInfoSelectSql(table, columns))
 	ret.Add(genFuncCalcInsertField(table, columns))
 	ret.Add(genFuncCalcUpdateField(table, columns))
 	ret.Add(genFuncInternalSelectNodeByIDs(table, columns))
 	ret.Add(genFuncInternalDirectInsert(table, columns))
 	ret.Add(genFuncInternalUpdateNodeInBothWhenInsert(table, columns))
-
-	//ret.Add(genDeclAt136())
-	//ret.Add(genDeclAt348())
-	//ret.Add(genDeclAt3223())
-	//ret.Add(genFuncmapperAll())
-	//ret.Add(genFuncmapperNumeric())
-	//ret.Add(genFuncallFields())
-	//ret.Add(genFunctreeFields())
-	//ret.Add(genFunccalcInsertField())
-	//ret.Add(genFunccalcUpdateField())
-	//ret.Add(genFuncinternalSelectNodeByIDs())
-	//ret.Add(genFuncinternalDirectInsert())
-	//ret.Add(genFuncinternalUpdateNodeInBothWhenInsert())
-	//ret.Add(genFuncinternalUpdateNodeInOnlyPrecursorWhenInsert())
-	//ret.Add(genFuncinternalInsertWithFunc())
-	//ret.Add(genFuncinternalDirectDelete())
-	//ret.Add(genFuncinternalUpdateNodeWhenDelete())
-	//ret.Add(genFuncgetDbCtx())
-	//ret.Add(genFuncSelectByID())
-	//ret.Add(genFuncSelectByIDs())
-	//ret.Add(genFuncBatchSelectByID())
-	//ret.Add(genFuncSelectByName())
-	//ret.Add(genFuncSelectMaxLevel())
-	//ret.Add(genFuncSelectMaxRight())
-	//ret.Add(genFuncSelectMaxLeft())
-	//ret.Add(genFuncSelectMaxTreeNo())
-	//ret.Add(genFuncSelectAllPosterity())
-	//ret.Add(genFuncSelectDirectPosterity())
-	//ret.Add(genFuncSelectBrother())
-	//ret.Add(genFuncSelectBrotherAndSelf())
-	//ret.Add(genFuncSelectAncestorChain())
-	//ret.Add(genFuncSelectAncestor())
-	//ret.Add(genFuncSelectParent())
-	//ret.Add(genFuncSelectByTreeNoAndLevel())
-	//ret.Add(genFuncSelectByLevel())
-	//ret.Add(genFuncSelectRoot())
-	//ret.Add(genFuncSelectLeaf())
-	//ret.Add(genFuncSelectAllLeaf())
-	//ret.Add(genFuncSelectAllRoot())
-	//ret.Add(genFuncInsert())
-	//ret.Add(genFuncInsertUnderNode())
-	//ret.Add(genFuncInsertBetweenNode())
-	//ret.Add(genFuncBatchInsert())
-	//ret.Add(genFuncBatchInsertUnderNode())
-	//ret.Add(genFuncBatchInsertBetweenNode())
-	//ret.Add(genFuncInsertNonNil())
-	//ret.Add(genFuncInsertNonNilUnderNode())
-	//ret.Add(genFuncInsertNonNilBetweenNode())
-	//ret.Add(genFuncInsertWithFunc())
-	//ret.Add(genFuncInsertWithFuncUnderNode())
-	//ret.Add(genFuncInsertWithFuncBetweenNode())
-	//ret.Add(genFuncBatchInsertWithFunc())
-	//ret.Add(genFuncDeleteByID())
-	//ret.Add(genFuncDeleteByIDs())
-	//ret.Add(genFuncBatchDeleteByID())
-	//ret.Add(genFuncUpdateByID())
-	//ret.Add(genFuncUpdateNonNilByID())
-	//ret.Add(genFuncUpdateWithFuncByID())
-	//ret.Add(genFuncBatchUpdateWithFuncByID())
+	ret.Add(genFuncInternalUpdateNodeInOnlyPrecursorWhenInsert(table, columns))
+	ret.Add(genFuncInternalInsertWithFunc(table, columns))
+	ret.Add(genFuncInternalDirectDelete(table, columns))
+	ret.Add(genFuncInternalUpdateNodeWhenDelete(table, columns))
+	ret.Add(genFuncSelectByID(table, columns))
+	ret.Add(genFuncSelectByIDs(table, columns))
+	ret.Add(genFuncBatchSelectByID(table, columns))
+	ret.Add(genFuncSelectByName(table, columns))
+	ret.Add(genFuncSelectMaxLevel(table, columns))
+	ret.Add(genFuncSelectMaxRight(table, columns))
+	ret.Add(genFuncSelectMaxLeft(table, columns))
+	ret.Add(genFuncSelectMaxTreeNo(table, columns))
+	ret.Add(genFuncSelectAllPosterity(table, columns))
+	ret.Add(genFuncSelectDirectPosterity(table, columns))
+	ret.Add(genFuncSelectBrother(table, columns))
+	ret.Add(genFuncSelectBrotherAndSelf(table, columns))
+	ret.Add(genFuncSelectAncestorChain(table, columns))
+	ret.Add(genFuncSelectAncestor(table, columns))
+	ret.Add(genFuncSelectParent(table, columns))
+	ret.Add(genFuncSelectByTreeNoAndLevel(table, columns))
+	ret.Add(genFuncSelectByLevel(table, columns))
+	ret.Add(genFuncSelectRoot(table, columns))
+	ret.Add(genFuncSelectLeafOfNodeWithPage(table, columns))
+	ret.Add(genFuncSelectAllLeafOfNode(table, columns))
+	ret.Add(genFuncSelectAllRoot(table, columns))
+	ret.Add(genFuncInsert(table, columns))
+	ret.Add(genFuncInsertUnderNode(table, columns))
+	ret.Add(genFuncInsertBetweenNode(table, columns))
+	ret.Add(genFuncBatchInsert(table, columns))
+	ret.Add(genFuncBatchInsertUnderNode(table, columns))
+	ret.Add(genFuncBatchInsertBetweenNode(table, columns))
+	ret.Add(genFuncInsertNonNil(table, columns))
+	ret.Add(genFuncInsertNonNilUnderNode(table, columns))
+	ret.Add(genFuncInsertNonNilBetweenNode(table, columns))
+	ret.Add(genFuncInsertWithFunc(table, columns))
+	ret.Add(genFuncInsertWithFuncUnderNode(table, columns))
+	ret.Add(genFuncInsertWithFuncBetweenNode(table, columns))
+	ret.Add(genFuncBatchInsertWithFunc(table, columns))
+	ret.Add(genFuncDeleteByID(table, columns))
+	ret.Add(genFuncDeleteByIDs(table, columns))
+	ret.Add(genFuncBatchDeleteByID(table, columns))
+	ret.Add(genFuncUpdateByID(table, columns))
+	ret.Add(genFuncUpdateNonNilByID(table, columns))
+	ret.Add(genFuncUpdateWithFuncByID(table, columns))
+	ret.Add(genFuncBatchUpdateWithFuncByID(table, columns))
 	return ret
 }
 
@@ -2737,45 +2638,60 @@ func getColumns(table string) []Column {
 			Default:         "CURRENT_TIMESTAMP",
 		},
 	)
+	columns = append(
+		columns, Column{
+			ColumnName:      "ns_id",
+			Type:            "bigint",
+			Nullable:        "NO",
+			TableName:       table,
+			ColumnComment:   "开始时间",
+			Tag:             "startAt",
+			MaxLength:       0,
+			NumberPrecision: 0,
+			ColumnType:      "bigint",
+			ColumnKey:       "",
+			Default:         "CURRENT_TIMESTAMP",
+		},
+	)
 
-	//columns := make([]Column, 0)
-	//var params = make(map[string]string)
-	//params["parseTime"] = "true"
-	//cfg := mysql.Config{
+	// columns := make([]Column, 0)
+	// var params = make(map[string]string)
+	// params["parseTime"] = "true"
+	// cfg := mysql.Config{
 	//	User:   "root",
 	//	Passwd: "root",
 	//	Net:    "tcp",
 	//	Addr:   "localhost:3307",
 	//	DBName: "metis",
 	//	Params: params,
-	//}
+	// }
 	//
-	//var err error
-	//db, err := sql.Open("mysql", cfg.FormatDSN())
-	//rows, err := db.Query(
+	// var err error
+	// db, err := sql.Open("mysql", cfg.FormatDSN())
+	// rows, err := db.Query(
 	//	fmt.Sprintf(
 	//		`SELECT
 	//	COLUMN_NAME,DATA_TYPE,IS_NULLABLE,TABLE_NAME,COLUMN_COMMENT,CHARACTER_MAXIMUM_LENGTH,COLUMN_TYPE,NUMERIC_PRECISION,COLUMN_KEY,COLUMN_DEFAULT
 	//	FROM information_schema.COLUMNS
 	//	WHERE table_schema = DATABASE()  AND TABLE_NAME = '%s'`, table,
 	//	),
-	//)
+	// )
 	//
-	//if err != nil {
+	// if err != nil {
 	//	log.Printf("table rows is nil with table:%s error: %v \n", table, err)
 	//	return columns
-	//}
+	// }
 	//
-	//if rows == nil {
+	// if rows == nil {
 	//	log.Printf("rows is nil with table:%s \n", table)
 	//	return columns
-	//}
+	// }
 	//
-	//defer func() {
+	// defer func() {
 	//	_ = rows.Close()
-	//}()
+	// }()
 	//
-	//for rows.Next() {
+	// for rows.Next() {
 	//
 	//	// todo: mysql bigint => go []byte
 	//	var maxLength, numberPrecision []byte
@@ -2803,9 +2719,17 @@ func getColumns(table string) []Column {
 	//	}
 	//
 	//	columns = append(columns, col)
-	//}
+	// }
 
 	return columns
+}
+
+func fillNs(columns []Column) jen.Code {
+	if hasColumn(ns_key, columns) {
+		// jen.Var().Id("values").Index().Id("any")
+		return jen.Id("values").Op("=").Id("append").Call(jen.Id("values"), jen.Add(useUtil("GetNsID")).Call(jen.Id("ag").Dot("ctx")))
+	}
+	return jen.Null()
 }
 
 func TestRepository(t *testing.T) {
@@ -2813,10 +2737,31 @@ func TestRepository(t *testing.T) {
 	strcase.ConfigureAcronym("ID", "id")
 	strcase.ConfigureAcronym("id", "ID")
 
-	table := lowerCamel
+	table := "role"
 	columns := getColumns(table)
 
 	f := genTreeRepositoryFile(table, columns)
+	fmt.Printf("%#v\n", f)
+	autogenFilePath := "second/module/user/repository/" + table + "/autogen.go"
+	if err := os.MkdirAll(filepath.Dir(autogenFilePath), 0766); err != nil {
+		panic(err)
+	}
+	wr, err := os.OpenFile(autogenFilePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	if err != nil {
+		panic(err)
+	}
+	err = f.Render(wr)
+}
+
+func TestRepository0(t *testing.T) {
+
+	strcase.ConfigureAcronym("ID", "id")
+	strcase.ConfigureAcronym("id", "ID")
+
+	table := "role"
+
+	f := generated.RenderFile(table)
+
 	fmt.Printf("%#v\n", f)
 	autogenFilePath := "second/module/user/repository/" + table + "/autogen.go"
 	if err := os.MkdirAll(filepath.Dir(autogenFilePath), 0766); err != nil {
