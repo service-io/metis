@@ -6,6 +6,7 @@ package util
 
 import (
 	"database/sql"
+	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 	"io"
 	"strings"
@@ -19,7 +20,7 @@ func DeferClose(closer io.Closer, errHandler ...func(err error)) {
 				eh(err)
 			}
 		}
-		return
+		panic(err)
 	}
 }
 
@@ -117,6 +118,11 @@ func ToAny[T any](p T) any {
 
 func ToPtr[T any](p T) *T {
 	return &p
+}
+
+func GetAccountID(ctx *gin.Context) int64 {
+	// TODO implement me
+	panic("implement me")
 }
 
 // SplitFunc 使用函数进行分割, 注意: 并不会移除符合谓词的字符,
