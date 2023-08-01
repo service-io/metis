@@ -2,13 +2,20 @@
 // @author tabuyos
 // @since 2023/8/1
 // @description generated
-package generated
+package main
 
 import (
+	"fmt"
 	"github.com/dave/jennifer/jen"
 	"metis/generated/helper"
 	"metis/generated/repository"
 )
+
+//go:generate go run gen_template.go 123
+//go:generate go run gen_template.go 456
+func main() {
+	fmt.Println(123)
+}
 
 func RenderFile(table string) *jen.File {
 	columns := getColumns(table)
